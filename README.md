@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./frontend/public/logo.png" alt="BiteBetter Logo" width="180">
+ <img src="frontend/public/logo.png" alt="BiteBetter Logo" width="220">
 </p>
 
 <h1 align="center">🍏 BiteBetter</h1>
@@ -8,9 +8,6 @@
   <strong>Helping South Africans make healthier food choices through AI-powered nutritional insights.</strong>
 </p>
 
-# 🍏 BiteBetter
-
-> **Helping South Africans make healthier food choices through AI-powered nutritional insights.**
 
 ## 📖 Overview
 
