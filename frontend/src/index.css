@@ -383,7 +383,7 @@ img {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--secondary);
+  background: var(--primary);
   color: white;
   display: grid;
   place-items: center;
