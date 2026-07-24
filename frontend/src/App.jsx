@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { supabase } from "./lib/supabase";
 
 function App() {
   const [message, setMessage] = useState("Loading...");
+  const [supabaseStatus, setSupabaseStatus] = useState("Checking Supabase...");
 
   useEffect(() => {
     axios
@@ -15,10 +17,27 @@ function App() {
       });
   }, []);
 
+  useEffect(() => {
+    supabase.auth
+      .getSession()
+      .then(({ error }) => {
+        if (error) {
+          setSupabaseStatus(`Supabase error: ${error.message}`);
+          return;
+        }
+
+        setSupabaseStatus("Supabase connected");
+      })
+      .catch(() => {
+        setSupabaseStatus("Supabase connection failed.");
+      });
+  }, []);
+
   return (
     <div style={{ padding: "2rem", fontFamily: "Arial" }}>
       <h1>BiteBetter</h1>
       <h2>{message}</h2>
+      <p>{supabaseStatus}</p>
     </div>
   );
 }
