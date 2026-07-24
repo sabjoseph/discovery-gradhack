@@ -1,7 +1,13 @@
-# discovery-gradhack
-# 🍏 BiteBetter
+<p align="center">
+ <img src="frontend/public/logo.png" alt="BiteBetter Logo" width="220">
+</p>
 
-> **Helping South Africans make healthier food choices through AI-powered nutritional insights.**
+<h1 align="center">🍏 BiteBetter</h1>
+
+<p align="center">
+  <strong>Helping South Africans make healthier food choices through AI-powered nutritional insights.</strong>
+</p>
+
 
 ## 📖 Overview
 
