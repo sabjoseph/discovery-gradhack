@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 function App() {
   const [message, setMessage] = useState("Loading...");
 
   useEffect(() => {
     axios
-      .get("http://localhost:5000")
+      .get(API_URL)
       .then((response) => {
         setMessage(response.data.message);
       })
