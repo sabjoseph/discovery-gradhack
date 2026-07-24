@@ -172,7 +172,6 @@ Hosted on **Render**
 
 ## 👥 Team Meridian
 
-Built with ❤️ during the Discovery GradHack 2026.
 
 ### Team Members
 
