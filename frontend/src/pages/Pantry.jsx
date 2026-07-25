@@ -474,7 +474,6 @@ function ItemDetailPanel({ row, items, busyId, onClose, onAdjust }) {
             return (
             <article key={item.id} className="fr-detail-item">
               <div className="fr-detail-item-top">
-                <span className="fr-qty-chip">Qty {item.quantity}</span>
                 <span className="fr-expiry-when">{expiryWhenLabel(item)}</span>
               </div>
               {meta && <p className="fr-meta fr-meta-inline">{meta}</p>}
@@ -528,14 +527,15 @@ function PantryCard({ item, priority = false, busy, onAdjust }) {
 
   return (
     <article className={`glass fr-card ${priority ? "is-priority is-compact" : ""}`}>
-      <div className="fr-card-top">
-        <span className="fr-qty-chip">Qty {item.quantity}</span>
-        {priority && (
-          <span className="fr-urgent">
+      {priority && (
+        <div className="fr-card-top">
+          <span
+            className={`fr-urgent ${item.expired ? "is-past" : "is-soon"}`}
+          >
             {item.expired ? "Past expiry" : "Expiring soon"}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       <h3>{item.name}</h3>
       <p className="fr-expiry-when">{expiryWhenLabel(item)}</p>
