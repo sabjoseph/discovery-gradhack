@@ -471,16 +471,6 @@
   margin-left: 0.35rem;
 }
 
-.pf-chip-add {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.65rem;
-}
-
-.pf-chip-add input {
-  flex: 1;
-}
-
 .pf-toggles {
   display: flex;
   flex-direction: column;

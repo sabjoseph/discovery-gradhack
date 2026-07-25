@@ -364,7 +364,7 @@ export default function Pantry() {
           <strong>
             Bite<span>Better</span>
           </strong>
-          <span>Kitchen intelligence hub · pantry from your last 30 days</span>
+          <span>What’s in your kitchen · based on your last 30 days of shopping</span>
           <div>
             <Link to="/app/recipes">Support recipes</Link>
             <Link to="/app/profile">Fridge settings</Link>

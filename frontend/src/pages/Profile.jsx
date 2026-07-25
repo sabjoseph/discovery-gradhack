@@ -110,26 +110,15 @@ function ChipField({
   values,
   suggestions,
   onToggle,
-  onAdd,
   onRemove,
-  placeholder,
   tone = "green",
   emptyHint,
 }) {
-  const [draft, setDraft] = useState("");
   const [showMore, setShowMore] = useState(false);
 
   const available = suggestions.filter((opt) => !values.includes(opt));
   const visible = showMore ? available : available.slice(0, 3);
   const hiddenCount = Math.max(0, available.length - visible.length);
-
-  function submitDraft(e) {
-    e.preventDefault();
-    const next = draft.trim();
-    if (!next) return;
-    onAdd(next);
-    setDraft("");
-  }
 
   return (
     <div className="pf-chip-field">
@@ -178,16 +167,6 @@ function ChipField({
           </button>
         )}
       </div>
-      <form className="pf-chip-add" onSubmit={submitDraft}>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={placeholder}
-        />
-        <button type="submit" className="btn btn-sm btn-outline">
-          Add
-        </button>
-      </form>
     </div>
   );
 }
@@ -319,14 +298,6 @@ export default function Profile() {
         ? current.filter((v) => v !== value)
         : [...current, value];
       return { ...prev, [key]: next };
-    });
-  }
-
-  function addToList(key, value) {
-    setSaved(false);
-    setForm((prev) => {
-      if (prev[key].includes(value)) return prev;
-      return { ...prev, [key]: [...prev[key], value] };
     });
   }
 
@@ -562,7 +533,8 @@ export default function Profile() {
                           </button>
                         ) : null}
                         <p className="pf-hint">
-                          Shown in the top-right avatar. Save Changes to keep it.
+                          This photo appears in the top-right corner. Save to keep
+                          it.
                         </p>
                       </div>
                     </div>
@@ -579,8 +551,7 @@ export default function Profile() {
                       </div>
                     </div>
                     <span className="pf-identity-hint">
-                      Name comes from your customer record — use Sign out in the
-                      avatar menu to choose a different profile.
+                      Want to switch accounts? Use Sign out in the avatar menu.
                     </span>
                   </div>
                 </section>
@@ -707,10 +678,8 @@ export default function Profile() {
                     values={form.dietary_preferences}
                     suggestions={DIET_SUGGESTIONS}
                     tone="coral"
-                    placeholder="Add a preference or allergy…"
-                    emptyHint="Add a preference to personalise recommendations."
+                    emptyHint="Tap an option below to personalise recommendations."
                     onToggle={(v) => toggleList("dietary_preferences", v)}
-                    onAdd={(v) => addToList("dietary_preferences", v)}
                     onRemove={(v) => removeFromList("dietary_preferences", v)}
                   />
                 </section>
@@ -722,10 +691,8 @@ export default function Profile() {
                     values={form.health_goals}
                     suggestions={GOAL_SUGGESTIONS}
                     tone="green"
-                    placeholder="Add a health goal…"
-                    emptyHint="Add a goal so recommendations stay on target."
+                    emptyHint="Tap a goal below so recommendations stay on target."
                     onToggle={(v) => toggleList("health_goals", v)}
-                    onAdd={(v) => addToList("health_goals", v)}
                     onRemove={(v) => removeFromList("health_goals", v)}
                   />
                 </section>

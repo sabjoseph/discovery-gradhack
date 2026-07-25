@@ -394,6 +394,11 @@ a.rw-redeem-btn {
   border: 1px solid transparent;
 }
 
+.rw-reward-copy {
+  min-width: 0;
+  flex: 1;
+}
+
 .rw-reward-item.is-affordable {
   background: #f3faf0;
   border-color: rgba(123, 188, 67, 0.35);
@@ -433,9 +438,15 @@ a.rw-redeem-btn {
   margin-top: 0.55rem;
 }
 
-.rw-reward-item:not(.is-affordable) .rw-redeem-btn {
+.rw-reward-item:not(.is-affordable):not(.is-owned) .rw-redeem-btn,
+.rw-reward-item .rw-redeem-btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.rw-reward-item.is-owned .rw-redeem-btn {
+  opacity: 1;
+  cursor: pointer;
 }
 
 .rw-voucher-code {
@@ -697,7 +708,13 @@ a.rw-redeem-btn {
 
   .rw-side {
     position: static;
-    max-height: 420px;
+    max-height: none;
+  }
+
+  .rw-side-scroll {
+    overflow: visible;
+    max-height: none;
+    flex: none;
   }
 
   .rw-card-grid {
@@ -708,5 +725,13 @@ a.rw-redeem-btn {
 @media (max-width: 720px) {
   .rw-glance-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rw-reward-item {
+    flex-wrap: wrap;
+  }
+
+  .rw-redeem-btn {
+    width: 100%;
   }
 }

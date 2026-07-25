@@ -127,6 +127,32 @@ router.get("/", async (req, res) => {
   }
 });
 
+/** Log a recipe added to the meal plan (counts toward Try 3 new recipes). */
+router.post("/tried", async (req, res) => {
+  try {
+    const customerId = req.body?.customerId;
+    const recipeId = req.body?.recipeId;
+    if (!customerId || recipeId == null) {
+      return res.status(400).json({
+        success: false,
+        message: "customerId and recipeId are required",
+      });
+    }
+
+    const { error } = await supabase.from("activity_log").insert({
+      customer_id: customerId,
+      event_type: "recipe_tried",
+      metadata: { recipe_id: Number(recipeId) || recipeId },
+    });
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const customerId = req.query.customerId;
