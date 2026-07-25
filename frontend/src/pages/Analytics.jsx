@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -13,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { useCustomer } from "../context/CustomerContext";
+import { useShoppingList } from "../context/ShoppingListContext";
 import { api, formatCurrency } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
 import ProgressRing from "../components/ProgressRing";
@@ -25,6 +27,25 @@ function scoreStatus(value, goal) {
   return "Getting started";
 }
 
+function periodLabel(days) {
+  if (days === 30) return "previous 30 days";
+  if (days === 60) return "previous 60 days";
+  if (days === 90) return "previous quarter";
+  return `previous ${days} days`;
+}
+
+function deltaTone(delta) {
+  if (Math.abs(delta) < 5) return "flat";
+  return delta >= 0 ? "up" : "down";
+}
+
+function deltaHeadline(delta) {
+  const abs = Math.abs(delta);
+  if (abs < 5) return "About the same as last period";
+  if (delta > 0) return `Your score improved by ${delta}`;
+  return `Your score dropped by ${abs}`;
+}
+
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -32,8 +53,7 @@ function CustomTooltip({ active, payload, label }) {
       <strong>{label}</strong>
       {payload.map((p) => (
         <div key={p.dataKey}>
-          {p.name}: {typeof p.value === "number" ? p.value : p.value}
-          {p.unit || ""}
+          {p.name}: {p.value}
         </div>
       ))}
     </div>
@@ -42,10 +62,14 @@ function CustomTooltip({ active, payload, label }) {
 
 export default function Analytics() {
   const { customer } = useCustomer();
+  const { addMissing } = useShoppingList();
   const [data, setData] = useState(null);
   const [days, setDays] = useState(90);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accepted, setAccepted] = useState(() => new Set());
+  const [acceptBusy, setAcceptBusy] = useState(null);
+  const [showFormula, setShowFormula] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -70,17 +94,36 @@ export default function Analytics() {
   const categoryChartData = useMemo(() => {
     if (!data?.categories) return [];
     return data.categories.map((c) => ({
-      name: c.subcategory.length > 18 ? `${c.subcategory.slice(0, 16)}…` : c.subcategory,
+      name:
+        c.subcategory.length > 18
+          ? `${c.subcategory.slice(0, 16)}…`
+          : c.subcategory,
       fullName: c.subcategory,
       spend: Math.round(c.spend),
-      signed: c.signedSpend,
       tag: c.tag,
       pct: c.pct,
     }));
   }, [data]);
 
+  async function acceptSwap(swap) {
+    const key = swap.id || swap.fromName;
+    if (accepted.has(key) || acceptBusy) return;
+    setAcceptBusy(key);
+    try {
+      await api.acceptAnalyticsSwap(customer.id, swap);
+      addMissing("Healthier swap", [
+        { name: swap.toName, quantity: 1, unit: "" },
+      ]);
+      setAccepted((prev) => new Set(prev).add(key));
+    } catch (err) {
+      setError(err.message || "Could not accept swap");
+    } finally {
+      setAcceptBusy(null);
+    }
+  }
+
   if (loading) return <LoadingBlock label="Building your Vitality analytics…" />;
-  if (error) {
+  if (error && !data) {
     return (
       <div className="an">
         <div className="glass an-error">{error}</div>
@@ -92,19 +135,19 @@ export default function Analytics() {
   const { score, rings, trend, swaps, projectedScore, peers } = data;
   const delta = score.delta;
   const budgetRing = rings.budget;
-  const budgetMax = 100;
-  const budgetValue = Math.min(budgetMax, budgetRing.usedPct);
+  const budgetValue = Math.min(100, budgetRing.usedPct);
   const budgetColor = budgetRing.over ? "#d64545" : "#001b44";
+  const scoreGain = Math.max(0, projectedScore - score.value);
 
   return (
     <div className="an">
       <header className="page-header an-header">
         <div>
           <p className="an-kicker">Vitality Analytics</p>
-          <h1>Your healthy shopping score</h1>
+          <h1>Close your rings. Find the spend that hurts. Swap smarter.</h1>
           <p>
-            Close your rings, see where spend goes, and simulate smarter swaps —
-            built from your real HealthyFood baskets.
+            Goals, peer benchmarks, and healthier swaps — built from your real
+            HealthyFood baskets. Dashboard is today; this page is the plan.
           </p>
         </div>
         <div className="an-period">
@@ -121,8 +164,9 @@ export default function Analytics() {
         </div>
       </header>
 
-      {/* Hero: score + triple rings */}
-      <section className="an-hero glass">
+      {error && <div className="glass an-error">{error}</div>}
+
+      <section className="glass an-hero">
         <div className="an-score-block">
           <ProgressRing
             value={score.value}
@@ -136,23 +180,46 @@ export default function Analytics() {
             <span className="an-score-label">BiteBetter</span>
           </ProgressRing>
           <div className="an-score-meta">
-            <span className={`an-delta ${delta >= 0 ? "up" : "down"}`}>
-              {score.previous > 0 ? (
-                <>
-                  {delta >= 0 ? "+" : ""}
-                  {delta} vs prior {days}d
-                </>
-              ) : (
-                <>Goal {score.goal} to unlock Healthy month</>
-              )}
-            </span>
             <p className="an-status">{scoreStatus(score.value, score.goal)}</p>
+            {score.previous > 0 ? (
+              <div className={`an-compare ${deltaTone(delta)}`}>
+                <p className="an-compare-title">{deltaHeadline(delta)}</p>
+                <p className="an-compare-detail">
+                  BiteBetter score this {days}-day period:{" "}
+                  <strong>{score.value}</strong>
+                  {" · "}
+                  {periodLabel(days)}: <strong>{score.previous}</strong>
+                  {" · "}
+                  change:{" "}
+                  <strong>
+                    {delta > 0 ? "+" : delta < 0 ? "−" : ""}
+                    {Math.abs(delta)}
+                  </strong>
+                </p>
+              </div>
+            ) : (
+              <span className="an-delta flat">
+                Goal {score.goal} to unlock Healthy month
+              </span>
+            )}
             <p className="an-mix-line">
               {score.healthyPct}% healthy · {score.neutralPct}% neutral ·{" "}
               {score.unhealthyPct}% unhealthy
             </p>
             {score.value >= score.goal && (
-              <span className="an-badge">+{rings.healthy.points} pts unlocked</span>
+              <span className="an-badge">
+                Closed · +{rings.healthy.points} pts
+              </span>
+            )}
+            <button
+              type="button"
+              className="an-formula-toggle"
+              onClick={() => setShowFormula((v) => !v)}
+            >
+              {showFormula ? "Hide" : "How we score"}
+            </button>
+            {showFormula && (
+              <p className="an-formula">{score.formula}</p>
             )}
           </div>
         </div>
@@ -170,13 +237,17 @@ export default function Analytics() {
               <span>of {rings.healthy.target}%</span>
             </ProgressRing>
             <h3>Healthy</h3>
-            <p>{rings.healthy.closed ? "Ring closed" : "Keep closing"}</p>
+            <p className={rings.healthy.closed ? "is-closed-label" : undefined}>
+              {rings.healthy.closed
+                ? `Closed · +${rings.healthy.points} pts`
+                : "In progress"}
+            </p>
           </div>
 
           <div className="an-goal-ring">
             <ProgressRing
               value={budgetValue}
-              max={budgetMax}
+              max={100}
               size={112}
               stroke={10}
               color={budgetColor}
@@ -186,11 +257,16 @@ export default function Analytics() {
             </ProgressRing>
             <h3>{budgetRing.label}</h3>
             <p>
-              {budgetRing.inferred
-                ? `${formatCurrency(budgetRing.monthSpend)} this month`
-                : budgetRing.over
-                  ? `${formatCurrency(Math.abs(budgetRing.remaining))} over`
-                  : `${formatCurrency(budgetRing.remaining)} left`}
+              {budgetRing.inferred ? (
+                <>
+                  {formatCurrency(budgetRing.monthSpend)} this month ·{" "}
+                  <Link to="/app/profile">Set a budget</Link>
+                </>
+              ) : budgetRing.over ? (
+                `${formatCurrency(Math.abs(budgetRing.remaining))} over`
+              ) : (
+                `${formatCurrency(budgetRing.remaining)} left`
+              )}
             </p>
           </div>
 
@@ -206,58 +282,23 @@ export default function Analytics() {
               <span>fresh</span>
             </ProgressRing>
             <h3>{rings.pantry.label}</h3>
-            <p>
+            <p className={rings.pantry.closed ? "is-closed-label" : undefined}>
               {rings.pantry.itemCount === 0
                 ? "No items stocked"
                 : rings.pantry.expiringSoon === 0
-                  ? `All ${rings.pantry.itemCount} items fresh`
+                  ? `Closed · all ${rings.pantry.itemCount} fresh`
                   : `${rings.pantry.expiringSoon} of ${rings.pantry.itemCount} expiring soon`}
             </p>
           </div>
         </div>
       </section>
 
-      {/* Trend */}
-      <section className="glass an-card">
-        <div className="an-card-head">
-          <div>
-            <h2>Score over time</h2>
-            <p>Weekly BiteBetter score across your shopping history.</p>
-          </div>
-        </div>
-        <div className="an-chart">
-          {trend.length === 0 ? (
-            <p className="an-empty">Not enough baskets in this period.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={trend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" tick={{ fill: "#5b6b7c", fontSize: 12 }} />
-                <YAxis domain={[0, 100]} tick={{ fill: "#5b6b7c", fontSize: 12 }} width={36} />
-                <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine y={score.goal} stroke="#7bbc43" strokeDasharray="4 4" />
-                <Line
-                  type="monotone"
-                  dataKey="score"
-                  name="Score"
-                  stroke="#001b44"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: "#7bbc43" }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </section>
-
       <div className="an-grid">
-        {/* Categories */}
         <section className="glass an-card">
           <div className="an-card-head">
             <div>
               <h2>Where the money goes</h2>
-              <p>Top categories by spend — green healthy, red unhealthy.</p>
+              <p>Top categories — green healthy, red unhealthy.</p>
             </div>
           </div>
           <div className="an-chart an-chart-tall">
@@ -270,8 +311,15 @@ export default function Analytics() {
                   layout="vertical"
                   margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: "#5b6b7c", fontSize: 11 }} />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#e2e8f0"
+                    horizontal={false}
+                  />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: "#5b6b7c", fontSize: 11 }}
+                  />
                   <YAxis
                     type="category"
                     dataKey="name"
@@ -304,7 +352,6 @@ export default function Analytics() {
           </div>
         </section>
 
-        {/* Peers */}
         <section className="glass an-card">
           <div className="an-card-head an-card-head-row">
             <div>
@@ -324,12 +371,23 @@ export default function Analytics() {
               <span className="an-pct-suffix">th</span>
             </ProgressRing>
           </div>
+          <p className="an-insight">{peers.insight}</p>
           <div className="an-chart">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={peers.distribution} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart
+                data={peers.distribution}
+                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" tick={{ fill: "#5b6b7c", fontSize: 11 }} />
-                <YAxis allowDecimals={false} tick={{ fill: "#5b6b7c", fontSize: 11 }} width={28} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "#5b6b7c", fontSize: 11 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fill: "#5b6b7c", fontSize: 11 }}
+                  width={28}
+                />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="count" name="Shoppers" radius={[6, 6, 0, 0]}>
                   {peers.distribution.map((entry) => (
@@ -343,27 +401,80 @@ export default function Analytics() {
               </BarChart>
             </ResponsiveContainer>
             <p className="an-peer-caption">
-              You&apos;re at <strong>{peers.yourHealthyPct}%</strong> healthy spend —{" "}
-              <strong>{peers.percentile}th</strong> percentile. Green bar = your band.
+              You at <strong>{peers.yourHealthyPct}%</strong> healthy · green =
+              your band
             </p>
           </div>
         </section>
       </div>
 
-      {/* Swaps */}
+      <section className="glass an-card">
+        <div className="an-card-head">
+          <div>
+            <h2>Score over time</h2>
+            <p>Weekly BiteBetter score — same formula as the hero ring.</p>
+          </div>
+        </div>
+        <div className="an-chart">
+          {trend.length === 0 ? (
+            <p className="an-empty">Not enough baskets in this period.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart
+                data={trend}
+                margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "#5b6b7c", fontSize: 12 }}
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  tick={{ fill: "#5b6b7c", fontSize: 12 }}
+                  width={36}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine
+                  y={score.goal}
+                  stroke="#7bbc43"
+                  strokeDasharray="4 4"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="score"
+                  name="Score"
+                  stroke="#001b44"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: "#7bbc43" }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </section>
+
       <section className="glass an-card an-swaps">
         <div className="an-card-head">
           <div>
             <h2>Swap simulator</h2>
             <p>
-              Replace your top unhealthy spends and watch the Healthy ring close.
+              Estimated impact if you replace top unhealthy spends. Accept adds
+              the healthier option to your shopping list.
             </p>
           </div>
         </div>
 
         <div className="an-swap-rings">
           <div className="an-swap-ring">
-            <ProgressRing value={score.value} max={100} size={120} stroke={11} color="#94a3b8">
+            <ProgressRing
+              value={score.value}
+              max={100}
+              size={120}
+              stroke={11}
+              color="#94a3b8"
+            >
               <strong>{score.value}</strong>
               <span>Now</span>
             </ProgressRing>
@@ -385,8 +496,8 @@ export default function Analytics() {
             </ProgressRing>
           </div>
           <div className="an-swap-gain">
-            <strong>+{Math.max(0, projectedScore - score.value)}</strong>
-            <span>projected score points</span>
+            <strong>+{scoreGain}</strong>
+            <span>estimated score points</span>
             {projectedScore >= score.goal && score.value < score.goal && (
               <span className="an-badge">Would unlock Healthy month</span>
             )}
@@ -394,33 +505,52 @@ export default function Analytics() {
         </div>
 
         {swaps.length === 0 ? (
-          <p className="an-empty">No unhealthy items to swap in this period — nice work.</p>
+          <p className="an-empty">
+            Nothing to swap in this period — strong month.
+          </p>
         ) : (
           <ul className="an-swap-list">
-            {swaps.map((s) => (
-              <li key={`${s.fromName}-${s.fromCategory}`}>
-                <div className="an-swap-from">
-                  <strong>{s.fromName}</strong>
-                  <span>
-                    {s.fromCategory} · {formatCurrency(s.fromSpend)}
-                  </span>
-                </div>
-                <div className="an-swap-to">
-                  <strong>→ {s.toName}</strong>
-                  <span>
-                    ~{formatCurrency(s.estPrice)}
-                    {s.randDelta !== 0 && (
-                      <>
-                        {" "}
-                        ({s.randDelta > 0 ? "+" : ""}
-                        {formatCurrency(s.randDelta)})
-                      </>
-                    )}
-                  </span>
-                  <em>{s.reason}</em>
-                </div>
-              </li>
-            ))}
+            {swaps.map((s) => {
+              const key = s.id || s.fromName;
+              const done = accepted.has(key);
+              return (
+                <li key={key}>
+                  <div className="an-swap-from">
+                    <strong>{s.fromName}</strong>
+                    <span>
+                      {s.fromCategory} · {formatCurrency(s.fromSpend)}
+                    </span>
+                  </div>
+                  <div className="an-swap-to">
+                    <strong>→ {s.toName}</strong>
+                    <span>
+                      ~{formatCurrency(s.estPrice)}
+                      {s.randDelta !== 0 && (
+                        <>
+                          {" "}
+                          ({s.randDelta > 0 ? "+" : ""}
+                          {formatCurrency(s.randDelta)})
+                        </>
+                      )}
+                      {" · "}+{s.scoreGain} pts est.
+                    </span>
+                    <em>{s.reason}</em>
+                  </div>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${done ? "btn-outline" : ""}`}
+                    disabled={done || acceptBusy === key}
+                    onClick={() => acceptSwap(s)}
+                  >
+                    {done
+                      ? "Accepted"
+                      : acceptBusy === key
+                        ? "Saving…"
+                        : "Accept swap"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

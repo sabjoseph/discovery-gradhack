@@ -14,10 +14,9 @@ const FRESH_GOAL = 90;
 const HEALTHY_POINTS = 40;
 const PANTRY_POINTS = 15;
 
-/** Heuristic swaps keyed by lowercase substring match on subcategory. */
 const SWAP_RULES = [
   {
-    match: /sugar|sweet|chocol|biscuit|candy|dessert/i,
+    match: /sugar|sweet|chocol|biscuit|candy|dessert|custard|rusk/i,
     toSubcategory: "Fruit",
     toName: "Fresh seasonal fruit",
     reason: "Swap sweets for natural fruit sugars and fibre",
@@ -41,7 +40,7 @@ const SWAP_RULES = [
     reason: "More fibre, steadier energy",
   },
   {
-    match: /fried|chip|crisp/i,
+    match: /fried|chip|crisp|high fat|baked and fried/i,
     toSubcategory: "Fish and seafood",
     toName: "Grilled fish",
     reason: "Same convenience vibe, far healthier prep",
@@ -60,14 +59,14 @@ const DEFAULT_SWAP = {
   reason: "Replace an unhealthy buy with a HealthyFood staple",
 };
 
+let cachedPeers = null;
+
 function findSwapRule(subcategory) {
   for (const rule of SWAP_RULES) {
     if (rule.match.test(subcategory || "")) return rule;
   }
   return DEFAULT_SWAP;
 }
-
-let cachedPeers = null;
 
 function classificationFromItem(item) {
   const nested = item.products?.categories?.health_classifications;
@@ -126,19 +125,20 @@ function accumulateBasket(basket, spend, bySubcat, byProduct, weekMap) {
     week[tag] += amount;
     week.total += amount;
 
-    const catKey = subcategory;
-    if (!bySubcat.has(catKey)) {
-      bySubcat.set(catKey, {
+    if (!bySubcat.has(subcategory)) {
+      bySubcat.set(subcategory, {
         subcategory,
         main,
         tag,
         spend: 0,
       });
     }
-    const catRow = bySubcat.get(catKey);
+    const catRow = bySubcat.get(subcategory);
     catRow.spend += amount;
     if (tag === "unhealthy") catRow.tag = "unhealthy";
-    else if (tag === "healthy" && catRow.tag !== "unhealthy") catRow.tag = "healthy";
+    else if (tag === "healthy" && catRow.tag !== "unhealthy") {
+      catRow.tag = "healthy";
+    }
 
     if (productId) {
       if (!byProduct.has(productId)) {
@@ -177,7 +177,8 @@ function buildCategories(bySubcat, total) {
       ...c,
       spend: Math.round(c.spend * 100) / 100,
       pct: pct(c.spend, total),
-      signedSpend: c.tag === "unhealthy" ? -Math.round(c.spend) : Math.round(c.spend),
+      signedSpend:
+        c.tag === "unhealthy" ? -Math.round(c.spend) : Math.round(c.spend),
     }));
 }
 
@@ -185,11 +186,13 @@ function lookupAvgPrice(avgPriceBySubcat, targetSub) {
   if (avgPriceBySubcat.has(targetSub)) return avgPriceBySubcat.get(targetSub);
   const needle = (targetSub || "").toLowerCase();
   for (const [sub, avg] of avgPriceBySubcat) {
-    if (sub.toLowerCase().includes(needle) || needle.includes(sub.toLowerCase())) {
+    if (
+      sub.toLowerCase().includes(needle) ||
+      needle.includes(sub.toLowerCase())
+    ) {
       return avg;
     }
   }
-  // Prefer any fruit/veg-ish category average
   for (const [sub, avg] of avgPriceBySubcat) {
     if (/fruit|veg|legume|whole grain/i.test(sub)) return avg;
   }
@@ -227,6 +230,7 @@ function buildSwaps(byProduct, avgPriceBySubcat, spend) {
     );
 
     swaps.push({
+      id: item.productId,
       fromName: item.name,
       fromSpend: Math.round(item.spend * 100) / 100,
       fromCategory: item.subcategory,
@@ -244,10 +248,8 @@ function buildSwaps(byProduct, avgPriceBySubcat, spend) {
 
 function projectedScoreFromSwaps(spend, swaps) {
   let healthy = spend.healthy;
-  let unhealthy = spend.unhealthy;
   for (const s of swaps) {
     healthy += s.fromSpend;
-    unhealthy = Math.max(0, unhealthy - s.fromSpend);
   }
   return scoreFromMix(healthy, spend.neutral, spend.total);
 }
@@ -305,25 +307,34 @@ async function getPeerStats(force = false) {
   for (const basket of baskets || []) {
     const id = basket.customer_id;
     if (!byCustomer.has(id)) {
-      byCustomer.set(id, { healthy: 0, total: 0 });
+      byCustomer.set(id, { healthy: 0, unhealthy: 0, total: 0 });
     }
     const row = byCustomer.get(id);
     for (const item of basket.basket_items || []) {
       const amount = Number(item.line_total || 0);
       row.total += amount;
-      if (classificationFromItem(item) === "healthy") row.healthy += amount;
+      const tag = classificationFromItem(item);
+      if (tag === "healthy") row.healthy += amount;
+      if (tag === "unhealthy") row.unhealthy += amount;
     }
   }
 
-  const values = [...byCustomer.values()]
-    .filter((r) => r.total > 0)
-    .map((r) => pct(r.healthy, r.total))
-    .sort((a, b) => a - b);
+  const rows = [...byCustomer.values()].filter((r) => r.total > 0);
+  const values = rows.map((r) => pct(r.healthy, r.total)).sort((a, b) => a - b);
+
+  const sortedByHealthy = [...rows].sort(
+    (a, b) => pct(b.healthy, b.total) - pct(a.healthy, a.total)
+  );
+  const topCount = Math.max(1, Math.ceil(sortedByHealthy.length * 0.1));
+  const topSlice = sortedByHealthy.slice(0, topCount);
+  const topAvgUnhealthy =
+    topSlice.reduce((sum, r) => sum + r.unhealthy, 0) / topSlice.length;
 
   cachedPeers = {
     values,
     distribution: buildPeerHistogram(values),
     customerCount: values.length,
+    topAvgUnhealthy: Math.round(topAvgUnhealthy),
   };
   return cachedPeers;
 }
@@ -351,14 +362,39 @@ const BASKET_SELECT = `
   )
 `;
 
-router.get("/peers", async (req, res) => {
+router.post("/:customerId/swaps/accept", async (req, res) => {
   try {
-    const peers = await getPeerStats(req.query.refresh === "1");
+    const { customerId } = req.params;
+    const { fromName, toName, fromSpend, estPrice, fromCategory, toCategory } =
+      req.body || {};
+
+    if (!fromName || !toName) {
+      return res
+        .status(400)
+        .json({ success: false, message: "fromName and toName are required" });
+    }
+
+    const { error } = await supabase.from("activity_log").insert({
+      customer_id: customerId,
+      event_type: "swap_accepted",
+      metadata: {
+        fromName,
+        toName,
+        fromSpend,
+        estPrice,
+        fromCategory,
+        toCategory,
+        source: "analytics",
+      },
+    });
+
+    if (error) throw error;
+
     res.json({
       success: true,
       data: {
-        customerCount: peers.customerCount,
-        distribution: peers.distribution,
+        accepted: true,
+        message: `${toName} added to your healthier shopping intent`,
       },
     });
   } catch (err) {
@@ -506,6 +542,9 @@ router.get("/:customerId", async (req, res) => {
       return youHealthyPct >= lo && youHealthyPct < (hi === 100 ? 101 : hi);
     });
 
+    const yourUnhealthy = Math.round(spend.unhealthy);
+    const unhealthyGap = Math.round(yourUnhealthy - peers.topAvgUnhealthy);
+
     res.json({
       success: true,
       data: {
@@ -519,6 +558,8 @@ router.get("/:customerId", async (req, res) => {
           healthyPct,
           neutralPct,
           unhealthyPct,
+          formula:
+            "Score = healthy% of spend + half of neutral% (rand-weighted)",
         },
         rings: {
           healthy: {
@@ -561,6 +602,15 @@ router.get("/:customerId", async (req, res) => {
           })),
           percentile,
           yourHealthyPct: youHealthyPct,
+          yourUnhealthySpend: yourUnhealthy,
+          topAvgUnhealthySpend: peers.topAvgUnhealthy,
+          unhealthyGap,
+          insight:
+            unhealthyGap > 50
+              ? `Shoppers in the top 10% spend about R${unhealthyGap} less on unhealthy items than you over this period.`
+              : percentile >= 80
+                ? `You're among the healthier shoppers — ${percentile}th percentile on healthy spend.`
+                : `You're at the ${percentile}th percentile of HealthyFood shoppers by healthy spend share.`,
         },
       },
     });
