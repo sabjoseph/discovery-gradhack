@@ -58,6 +58,7 @@ export default function Recipes() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [cookFromPantry, setCookFromPantry] = useState(true);
+  const [preferencesOnly, setPreferencesOnly] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [activeDay, setActiveDay] = useState(DAYS[0]);
   const [assignTarget, setAssignTarget] = useState(null);
@@ -116,6 +117,10 @@ export default function Recipes() {
     }
   }, [loading, recsLoading]);
 
+  const hasSavedPreferences = recipes.some(
+    (r) => (r.preferences?.selectedCount ?? 0) > 0
+  );
+
   const filtered = useMemo(() => {
     let list = [...recipes];
 
@@ -135,17 +140,43 @@ export default function Recipes() {
       });
     }
 
+    // Gated on hasSavedPreferences: without it, clearing every preference would
+    // leave this filter stuck on with no visible control to switch it off.
+    if (preferencesOnly && hasSavedPreferences) {
+      // Keep recipes we could confirm satisfy every saved preference. Recipes we
+      // cannot decide from stored data are kept out rather than assumed to match.
+      list = list.filter(
+        (r) => r.preferences?.matchPercent === 100 && r.preferences.unmet?.length === 0
+      );
+    }
+
+    // Recipes containing a saved allergen always sink below safe recipes,
+    // whichever sort the user has chosen.
+    const bySafety = (a, b) =>
+      Number(a.isSafe === false) - Number(b.isSafe === false);
+
     if (cookFromPantry) {
       list.sort(
         (a, b) =>
-          b.matchPercent - a.matchPercent || b.matchCount - a.matchCount
+          bySafety(a, b) ||
+          b.matchPercent - a.matchPercent ||
+          // Preference alignment breaks pantry ties.
+          (b.personalScore ?? 0) - (a.personalScore ?? 0) ||
+          b.matchCount - a.matchCount
       );
     } else {
-      list.sort((a, b) => a.name.localeCompare(b.name));
+      list.sort((a, b) => bySafety(a, b) || a.name.localeCompare(b.name));
     }
 
     return list;
-  }, [recipes, sourceFilter, categoryFilter, cookFromPantry]);
+  }, [
+    recipes,
+    sourceFilter,
+    categoryFilter,
+    cookFromPantry,
+    preferencesOnly,
+    hasSavedPreferences,
+  ]);
 
   function handleAssign(recipe) {
     if (!assignTarget) return;
@@ -414,7 +445,9 @@ export default function Recipes() {
               return (
                 <article
                   key={item.id}
-                  className={`rp-foryou-card ${accepted ? "is-accepted" : ""}`}
+                  className={`rp-foryou-card ${accepted ? "is-accepted" : ""} ${
+                    item.isSafe === false ? "has-allergen" : ""
+                  }`}
                 >
                   <div className="rp-foryou-card-main">
                     <div className="rp-foryou-tags">
@@ -424,10 +457,21 @@ export default function Recipes() {
                           {item.matchPercent}% pantry match
                         </span>
                       )}
+                      {item.preferences?.matched?.map((pref) => (
+                        <span key={pref.id} className="rp-foryou-pref-pill">
+                          {pref.label}
+                        </span>
+                      ))}
                     </div>
                     <h3>
                       {item.recipe?.name || item.product?.name || "Suggestion"}
                     </h3>
+                    {item.isSafe === false && (
+                      <p className="rp-allergen-flag" role="alert">
+                        <span aria-hidden="true">⚠</span> Contains{" "}
+                        {item.allergen.labels.join(", ")} — see alternatives
+                      </p>
+                    )}
                     <p className="rp-foryou-reason">{item.reason}</p>
                     <p className="rp-foryou-meta">
                       {item.recipe?.prep_time_minutes != null &&
@@ -524,6 +568,16 @@ export default function Recipes() {
               />
               Cook from pantry
             </label>
+            {hasSavedPreferences && (
+              <label className="rp-toggle">
+                <input
+                  type="checkbox"
+                  checked={preferencesOnly}
+                  onChange={(e) => setPreferencesOnly(e.target.checked)}
+                />
+                Matches my dietary preferences
+              </label>
+            )}
           </div>
         </div>
 
@@ -536,11 +590,40 @@ export default function Recipes() {
             {filtered.map((recipe) => {
               const badge = sourceBadge(recipe.source);
               return (
-                <article key={recipe.id} className="panel rp-recipe-card">
+                <article
+                  key={recipe.id}
+                  className={`panel rp-recipe-card ${
+                    recipe.isSafe === false ? "has-allergen" : ""
+                  }`}
+                >
                   <div className="rp-card-top">
                     <h3>{recipe.name}</h3>
                     <span className={`rp-source ${badge.tone}`}>{badge.label}</span>
                   </div>
+                  {recipe.isSafe === false && (
+                    <p className="rp-allergen-flag" role="alert">
+                      <span aria-hidden="true">⚠</span> Contains{" "}
+                      {recipe.allergen.labels.join(", ")} — see alternatives
+                    </p>
+                  )}
+                  {recipe.preferences?.badges?.length > 0 && (
+                    <ul className="rp-pref-badges">
+                      {recipe.preferences.badges.map((label) => (
+                        <li
+                          key={label}
+                          className={
+                            recipe.preferences.matched?.some(
+                              (m) => m.label === label
+                            )
+                              ? "is-matched"
+                              : ""
+                          }
+                        >
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <p className="rp-card-meta">
                     {recipe.prepTimeMinutes} min · serves {recipe.servings} ·{" "}
                     {recipe.matchPercent}% pantry match

@@ -1,4 +1,5 @@
 const supabase = require("../config/supabase");
+const { extractAllergies } = require("../utils/recipePersonalisation");
 
 const MAX_REQUESTS_PER_MINUTE = 12;
 const rateLimits = new Map();
@@ -225,6 +226,7 @@ async function fetchCustomerContext(customerId) {
       dietary_preferences: Array.isArray(profile?.dietary_preferences)
         ? profile.dietary_preferences
         : [],
+      allergies: extractAllergies(profile?.health_goals),
       health_goals: healthGoals,
     },
   };
@@ -247,8 +249,12 @@ ${JSON.stringify(context.recipes, null, 2)}
 RECENT PURCHASES (last 30 days):
 ${JSON.stringify(context.purchases, null, 2)}
 
-DIETARY PREFERENCES:
+DIETARY PREFERENCES (soft — prefer recipes that match these):
 ${JSON.stringify(context.profile.dietary_preferences, null, 2)}
+
+FOOD ALLERGIES (strict — never suggest a recipe containing these without warning
+the customer and offering an alternative ingredient):
+${JSON.stringify(context.profile.allergies, null, 2)}
 
 HEALTH GOALS:
 ${JSON.stringify(context.profile.health_goals, null, 2)}
