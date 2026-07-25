@@ -18,6 +18,10 @@ function classifyCategory(mainCategory) {
 
 let cachedDatasetEnd = null;
 
+function invalidateDatasetEnd() {
+  cachedDatasetEnd = null;
+}
+
 async function getDatasetEndDate() {
   if (cachedDatasetEnd) return cachedDatasetEnd;
   const { data } = await supabase
@@ -56,4 +60,5 @@ module.exports = {
   daysUntil,
   daysUntilFrom,
   getDatasetEndDate,
+  invalidateDatasetEnd,
 };
