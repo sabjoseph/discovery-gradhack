@@ -34,18 +34,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 8px 20px rgba(0, 27, 68, 0.1);
   flex-shrink: 0;
 }
 
 .np-logo-badge img {
-  width: 34px;
-  height: 34px;
+  width: 96px;
+  height: 96px;
   object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 6px 16px rgba(0, 27, 68, 0.12));
 }
 
 .np-title {
@@ -113,7 +110,7 @@
 .np-card-brand {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 1.15rem;
 }
 
 .np-card-header h2 {
@@ -439,9 +436,9 @@
     max-width: none;
   }
 
-  .np-logo-badge {
-    margin-left: auto;
-    margin-right: auto;
+  .np-logo-badge img {
+    width: 84px;
+    height: 84px;
   }
 
   .np-lead {

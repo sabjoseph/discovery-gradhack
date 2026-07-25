@@ -177,7 +177,7 @@ export default function NamePicker() {
           <header className="np-card-header">
             <div className="np-card-brand">
               <div className="np-logo-badge">
-                <img src="/BiteBetter Logo.png" alt="BiteBetter" />
+                <img src="/assets/bitebetter-icon.png" alt="BiteBetter" />
               </div>
               <div>
                 <h2>
