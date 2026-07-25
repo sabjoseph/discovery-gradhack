@@ -3,6 +3,7 @@ import { useCustomer } from "../context/CustomerContext";
 import { api, formatCurrency, formatDate } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
 import SegmentedRing from "../components/SegmentedRing";
+import AddPurchaseModal from "../components/AddPurchaseModal";
 import "./Purchases.css";
 
 const RECENT_LIMIT = 5;
@@ -20,44 +21,80 @@ function summaryFromBaskets(baskets, budgetMonthly) {
   const dated = (baskets || []).filter((b) => b.purchaseDate);
   if (dated.length === 0) return null;
 
-  const latest = dated.reduce(
+  const byMonth = {};
+  for (const basket of dated) {
+    const key = basket.purchaseDate.slice(0, 7);
+    if (!byMonth[key]) {
+      byMonth[key] = {
+        monthSpend: 0,
+        checkersSpend: 0,
+        wooliesSpend: 0,
+        otherSpend: 0,
+        basketCount: 0,
+      };
+    }
+    const total = Number(basket.total || 0);
+    byMonth[key].monthSpend += total;
+    byMonth[key].basketCount += 1;
+    const bucket = retailerBucket(basket.retailer);
+    if (bucket === "checkers") byMonth[key].checkersSpend += total;
+    else if (bucket === "woolies") byMonth[key].wooliesSpend += total;
+    else byMonth[key].otherSpend += total;
+  }
+
+  const latestDate = dated.reduce(
     (max, b) => (b.purchaseDate > max ? b.purchaseDate : max),
     dated[0].purchaseDate
   );
-  const monthKey = latest.slice(0, 7);
-  const monthBaskets = dated.filter((b) => b.purchaseDate.slice(0, 7) === monthKey);
-
-  let monthSpend = 0;
-  let checkersSpend = 0;
-  let wooliesSpend = 0;
-  let otherSpend = 0;
-
-  for (const basket of monthBaskets) {
-    const total = Number(basket.total || 0);
-    monthSpend += total;
-    const bucket = retailerBucket(basket.retailer);
-    if (bucket === "checkers") checkersSpend += total;
-    else if (bucket === "woolies") wooliesSpend += total;
-    else otherSpend += total;
+  const end = new Date(latestDate);
+  const candidateKeys = [];
+  for (let i = 0; i < 3; i += 1) {
+    const d = new Date(end);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (byMonth[key]) candidateKeys.push(key);
   }
 
+  let activeKey = candidateKeys[0] || Object.keys(byMonth).sort().pop();
+  if (candidateKeys.length > 1) {
+    const latest = byMonth[candidateKeys[0]];
+    const latestIsSparse =
+      latest.basketCount <= 2 ||
+      candidateKeys.slice(1).some(
+        (key) => latest.monthSpend < byMonth[key].monthSpend * 0.25
+      );
+    if (latestIsSparse) {
+      activeKey = candidateKeys.slice(1).reduce((best, key) => {
+        const a = byMonth[key];
+        const b = byMonth[best];
+        if (a.monthSpend > b.monthSpend) return key;
+        if (a.monthSpend === b.monthSpend && a.basketCount > b.basketCount) return key;
+        return best;
+      }, candidateKeys[1]);
+    }
+  }
+
+  const active = byMonth[activeKey];
   const hasBudget = budgetMonthly != null && !Number.isNaN(Number(budgetMonthly));
   const budget = hasBudget ? Number(budgetMonthly) : null;
 
   return {
-    monthLabel: new Date(`${monthKey}-01T00:00:00Z`).toLocaleString("en-ZA", {
+    monthLabel: new Date(`${activeKey}-01T00:00:00Z`).toLocaleString("en-ZA", {
       month: "long",
       year: "numeric",
     }),
     budgetMonthly: budget,
-    monthSpend,
-    checkersSpend,
-    wooliesSpend,
-    otherSpend,
-    remaining: budget != null ? budget - monthSpend : null,
+    monthSpend: active.monthSpend,
+    checkersSpend: active.checkersSpend,
+    wooliesSpend: active.wooliesSpend,
+    otherSpend: active.otherSpend,
+    remaining: budget != null ? budget - active.monthSpend : null,
     usedPct:
-      budget && budget > 0 ? Math.min(100, Math.round((monthSpend / budget) * 100)) : 0,
-    basketCount: monthBaskets.length,
+      budget && budget > 0
+        ? Math.min(100, Math.round((active.monthSpend / budget) * 100))
+        : 0,
+    basketCount: active.basketCount,
     partial: true,
   };
 }
@@ -136,6 +173,17 @@ function BasketCard({
                   </div>
                 ))}
               </div>
+              {detail.receipt?.imageUrl && (
+                <a
+                  className="ph-receipt-link"
+                  href={detail.receipt.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img src={detail.receipt.imageUrl} alt="Receipt" loading="lazy" />
+                  <span>View receipt image</span>
+                </a>
+              )}
             </>
           )}
         </div>
@@ -157,6 +205,11 @@ export default function Purchases() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showOlder, setShowOlder] = useState(false);
   const [error, setError] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState({ retailer: "", from: "", to: "" });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -195,18 +248,21 @@ export default function Purchases() {
     return () => {
       alive = false;
     };
-  }, [customer.id]);
+  }, [customer.id, refreshKey]);
 
   const loadPage = useCallback(
     async (page, append) => {
       const res = await api.getPurchases(customer.id, {
         page,
         limit: RECENT_LIMIT,
+        ...(filters.retailer ? { retailer: filters.retailer } : {}),
+        ...(filters.from ? { from: filters.from } : {}),
+        ...(filters.to ? { to: filters.to } : {}),
       });
       setBaskets((prev) => (append ? [...prev, ...(res.data || [])] : res.data || []));
       setPagination(res.pagination || { page, hasMore: false, total: 0 });
     },
-    [customer.id]
+    [customer.id, filters]
   );
 
   useEffect(() => {
@@ -225,7 +281,24 @@ export default function Purchases() {
     return () => {
       alive = false;
     };
-  }, [loadPage]);
+  }, [loadPage, refreshKey]);
+
+  function showToast(message) {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 4200);
+  }
+
+  function handlePurchaseSaved(result) {
+    setShowAdd(false);
+    setDetails({});
+    setRefreshKey((k) => k + 1);
+    const pantryBits = [];
+    if (result?.pantry?.created) pantryBits.push(`${result.pantry.created} new pantry item${result.pantry.created === 1 ? "" : "s"}`);
+    if (result?.pantry?.updated) pantryBits.push(`${result.pantry.updated} topped up`);
+    showToast(
+      `Purchase saved${pantryBits.length ? ` — ${pantryBits.join(", ")}` : ""}. Recipes and budget updated.`
+    );
+  }
 
   async function toggleBasket(basketId) {
     if (openId === basketId) {
@@ -279,9 +352,20 @@ export default function Purchases() {
     return Math.max(summary.monthSpend || 0, 1);
   }, [summary]);
 
-  const recent = baskets.slice(0, RECENT_LIMIT);
-  const older = baskets.slice(RECENT_LIMIT);
+  const searchTerm = search.trim().toLowerCase();
+  const visibleBaskets = searchTerm
+    ? baskets.filter(
+        (b) =>
+          (b.retailer || "").toLowerCase().includes(searchTerm) ||
+          formatDate(b.purchaseDate).toLowerCase().includes(searchTerm) ||
+          (b.id || "").toLowerCase().includes(searchTerm)
+      )
+    : baskets;
+
+  const recent = searchTerm ? visibleBaskets : visibleBaskets.slice(0, RECENT_LIMIT);
+  const older = searchTerm ? [] : visibleBaskets.slice(RECENT_LIMIT);
   const olderCount = Math.max(0, (pagination.total || 0) - RECENT_LIMIT);
+  const hasActiveFilters = Boolean(searchTerm || filters.retailer || filters.from || filters.to);
   const ringKey = summary?.monthLabel || "summary";
 
   const remaining = summary?.remaining;
@@ -443,7 +527,33 @@ export default function Purchases() {
                   </li>
                 )}
               </ul>
+
+              <button
+                type="button"
+                className="ph-add-cta"
+                onClick={() => setShowAdd(true)}
+              >
+                <span className="ph-add-cta-icon" aria-hidden>📷</span>
+                <strong>Add purchase</strong>
+                <span className="ph-add-cta-sub">
+                  Snap or upload your till slip — we'll read it for you
+                </span>
+              </button>
             </div>
+          )}
+
+          {!summary && (
+            <button
+              type="button"
+              className="ph-add-cta"
+              onClick={() => setShowAdd(true)}
+            >
+              <span className="ph-add-cta-icon" aria-hidden>📷</span>
+              <strong>Add purchase</strong>
+              <span className="ph-add-cta-sub">
+                Snap or upload your till slip — we'll read it for you
+              </span>
+            </button>
           )}
         </section>
 
@@ -451,13 +561,61 @@ export default function Purchases() {
 
         <section className="ph-history">
           <div className="ph-history-head">
-            <h2>Recent</h2>
+            <h2>{searchTerm ? "Search results" : "Recent"}</h2>
             <p>{pagination.total} baskets total</p>
+          </div>
+
+          <div className="glass ph-toolbar" role="search">
+            <input
+              type="search"
+              className="ph-search"
+              placeholder="Search purchases…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search purchases"
+            />
+            <select
+              value={filters.retailer}
+              onChange={(e) => setFilters((f) => ({ ...f, retailer: e.target.value }))}
+              aria-label="Filter by store"
+            >
+              <option value="">All stores</option>
+              <option value="Checkers">Checkers</option>
+              <option value="Woolworths">Woolworths</option>
+            </select>
+            <input
+              type="date"
+              value={filters.from}
+              onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
+              aria-label="From date"
+            />
+            <input
+              type="date"
+              value={filters.to}
+              onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
+              aria-label="To date"
+            />
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="ph-clear"
+                onClick={() => {
+                  setSearch("");
+                  setFilters({ retailer: "", from: "", to: "" });
+                }}
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           <div className="ph-list">
             {recent.length === 0 ? (
-              <div className="glass ph-empty">No purchases yet.</div>
+              <div className="glass ph-empty">
+                {hasActiveFilters
+                  ? "No purchases match your search or filters."
+                  : "No purchases yet. Tap “Add purchase” to scan your first receipt."}
+              </div>
             ) : (
               recent.map((basket) => (
                 <BasketCard
@@ -472,7 +630,7 @@ export default function Purchases() {
             )}
           </div>
 
-          {(olderCount > 0 || older.length > 0) && (
+          {!searchTerm && (olderCount > 0 || older.length > 0) && (
             <div className="ph-older">
               <button
                 type="button"
@@ -521,6 +679,20 @@ export default function Purchases() {
           )}
         </section>
       </div>
+
+      {toast && (
+        <div className="ph-toast" role="status">
+          {toast}
+        </div>
+      )}
+
+      {showAdd && (
+        <AddPurchaseModal
+          customerId={customer.id}
+          onClose={() => setShowAdd(false)}
+          onSaved={handlePurchaseSaved}
+        />
+      )}
     </div>
   );
 }

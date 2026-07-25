@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { api, formatCurrency } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
+import { LEAF_SRC, openLeafyChat } from "../components/FloatingCharacter";
+import "../components/FloatingCharacter.css";
 import "./Dashboard.css";
 
 const PROFILE_GOALS = "/app/profile?tab=account&panel=preferences";
@@ -129,6 +131,27 @@ export default function Dashboard() {
 
       <div className="dash-layout dash-layout-single">
         <div className="dash-main">
+          <section className="bb-home-welcome" aria-label="Meet Leafy">
+            <button
+              type="button"
+              className="bb-home-welcome-trigger"
+              onClick={openLeafyChat}
+              aria-label="Open chat with Leafy"
+            >
+              <div className="bb-char bb-char-home" aria-hidden="true">
+                <img src={LEAF_SRC} alt="" />
+              </div>
+            </button>
+            <div className="bb-home-welcome-copy">
+              <strong>Hi, I&apos;m Leafy — your BiteBetter pantry pal!</strong>
+              <p>
+                I&apos;m here to help you use what you&apos;ve already got, find
+                recipes, and eat a little healthier. Tap me anytime you want to
+                chat 🍃
+              </p>
+            </div>
+          </section>
+
           <section className="dash-hello glass-dark">
             <div>
               <p className="dash-kicker">Dashboard</p>

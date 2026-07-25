@@ -7,6 +7,24 @@ import "./FloatingCharacter.css";
 const LEAF_SRC = "/assets/bitebetter-leaf.png";
 const FALLBACK_REPLY =
   "Hmm, having trouble thinking right now — try again in a sec 🍃";
+const HINT_DELAY_MS = 1500;
+
+export { LEAF_SRC };
+
+export function openLeafyChat() {
+  window.dispatchEvent(new CustomEvent("leafy:open-chat"));
+}
+
+function LeafAvatar({ className = "", thinking = false, ...props }) {
+  return (
+    <div
+      className={`bb-char ${thinking ? "is-thinking" : ""} ${className}`.trim()}
+      {...props}
+    >
+      <img src={LEAF_SRC} alt="" />
+    </div>
+  );
+}
 
 async function readInvokeErrorBody(error) {
   if (!error?.context || typeof error.context.json !== "function") return null;
@@ -68,6 +86,8 @@ export default function FloatingCharacter() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [hasOpenedChat, setHasOpenedChat] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const listRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -76,6 +96,27 @@ export default function FloatingCharacter() {
       console.debug("[FloatingCharacter] customerId:", customerId, "hasToken:", Boolean(sessionToken));
     }
   }, [customerId, sessionToken]);
+
+  useEffect(() => {
+    function handleOpenRequest() {
+      setHasOpenedChat(true);
+      setShowHint(false);
+      setOpen(true);
+    }
+
+    window.addEventListener("leafy:open-chat", handleOpenRequest);
+    return () => window.removeEventListener("leafy:open-chat", handleOpenRequest);
+  }, []);
+
+  useEffect(() => {
+    if (hasOpenedChat || open) {
+      setShowHint(false);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setShowHint(true), HINT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [hasOpenedChat, open]);
 
   useEffect(() => {
     if (open && listRef.current) {
@@ -88,6 +129,16 @@ export default function FloatingCharacter() {
       inputRef.current?.focus();
     }
   }, [open]);
+
+  function openChat() {
+    setHasOpenedChat(true);
+    setShowHint(false);
+    setOpen(true);
+  }
+
+  function dismissHint() {
+    setShowHint(false);
+  }
 
   function closeChat() {
     if (thinking) return;
@@ -144,11 +195,19 @@ export default function FloatingCharacter() {
   return (
     <>
       {!open && (
-        <div className="bb-float">
+        <div
+          className="bb-float"
+          onMouseEnter={dismissHint}
+        >
+          {showHint && (
+            <div className="bb-hint-bubble" role="status" aria-live="polite">
+              Press me to chat!
+            </div>
+          )}
           <button
             type="button"
-            className={`bb-char ${thinking ? "is-thinking" : ""}`}
-            onClick={() => setOpen(true)}
+            className={`bb-char bb-char-float ${thinking ? "is-thinking" : ""}`}
+            onClick={openChat}
             aria-label="Open BiteBetter assistant"
           >
             <img src={LEAF_SRC} alt="" />
@@ -168,12 +227,7 @@ export default function FloatingCharacter() {
             aria-label="BiteBetter assistant chat"
           >
             <header className="bb-chat-head">
-              <div
-                className={`bb-char ${thinking ? "is-thinking" : ""}`}
-                aria-hidden="true"
-              >
-                <img src={LEAF_SRC} alt="" />
-              </div>
+              <LeafAvatar thinking={thinking} aria-hidden="true" />
               <div className="bb-chat-head-text">
                 <strong>Leafy</strong>
                 <small>Your BiteBetter pantry pal</small>
