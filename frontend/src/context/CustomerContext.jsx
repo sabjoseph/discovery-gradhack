@@ -8,14 +8,16 @@ export function CustomerProvider({ children }) {
   const [customer, setCustomerState] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed?.id && !parsed?.token) return null;
+      return parsed;
     } catch {
       return null;
     }
   });
 
   useEffect(() => {
-    if (customer?.id) {
+    if (customer?.id && customer?.token) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(customer));
     } else {
       localStorage.removeItem(STORAGE_KEY);
@@ -26,6 +28,7 @@ export function CustomerProvider({ children }) {
     () => ({
       customer,
       customerId: customer?.id ?? null,
+      sessionToken: customer?.token ?? null,
       setCustomer: (next) => setCustomerState(next),
       clearCustomer: () => setCustomerState(null),
     }),
