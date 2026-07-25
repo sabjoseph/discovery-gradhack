@@ -5,7 +5,7 @@ const STORAGE_KEY = "bitebetter_customer";
 const CustomerContext = createContext(null);
 
 export function CustomerProvider({ children }) {
-  const [customer, setCustomer] = useState(() => {
+  const [customer, setCustomerState] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : null;
@@ -15,7 +15,7 @@ export function CustomerProvider({ children }) {
   });
 
   useEffect(() => {
-    if (customer) {
+    if (customer?.id) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(customer));
     } else {
       localStorage.removeItem(STORAGE_KEY);
@@ -25,8 +25,9 @@ export function CustomerProvider({ children }) {
   const value = useMemo(
     () => ({
       customer,
-      setCustomer,
-      clearCustomer: () => setCustomer(null),
+      customerId: customer?.id ?? null,
+      setCustomer: (next) => setCustomerState(next),
+      clearCustomer: () => setCustomerState(null),
     }),
     [customer]
   );

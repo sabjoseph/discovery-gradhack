@@ -27,7 +27,11 @@ export const api = {
   getCustomer: (id) => get(`/api/customers/${id}`),
   getDashboard: (customerId, days = 30) =>
     get(`/api/dashboard/${customerId}`, { days }),
-  getPurchases: (customerId) => get(`/api/purchases/${customerId}`),
+  getPurchases: (customerId, params) =>
+    get(`/api/purchases/${customerId}`, params),
+  getPurchasesMeta: (customerId) => get(`/api/purchases/${customerId}/meta`),
+  getPurchaseBasket: (customerId, basketId) =>
+    get(`/api/purchases/${customerId}/${basketId}`),
   getPantry: (customerId) => get(`/api/pantry/${customerId}`),
   usePantryItem: (customerId, itemId, amount = 1) =>
     post(`/api/pantry/${customerId}/${itemId}/use`, { amount }),
@@ -37,6 +41,10 @@ export const api = {
     get(`/api/recipes/${id}`, customerId ? { customerId } : undefined),
   getRecommendations: (customerId) =>
     get(`/api/recommendations/${customerId}`),
+  actOnRecommendation: (customerId, recommendationId, action) =>
+    post(`/api/recommendations/${customerId}/${recommendationId}/action`, {
+      action,
+    }),
   getMilestones: (customerId) => get(`/api/milestones/${customerId}`),
   getProfile: (customerId) => get(`/api/profile/${customerId}`),
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),

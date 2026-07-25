@@ -4,10 +4,10 @@ import { initials } from "../lib/api";
 
 const links = [
   { to: "/app", label: "Home", end: true },
-  { to: "/app/purchases", label: "Purchases" },
   { to: "/app/pantry", label: "Pantry" },
   { to: "/app/recipes", label: "Recipes" },
   { to: "/app/recommendations", label: "For you" },
+  { to: "/app/purchases", label: "Purchases" },
   { to: "/app/rewards", label: "Rewards" },
   { to: "/app/profile", label: "Profile" },
 ];
@@ -60,7 +60,7 @@ export default function AppLayout() {
                 className="btn btn-sm btn-outline"
                 style={{ marginTop: "0.25rem", padding: "0.2rem 0.55rem" }}
               >
-                Switch
+                Switch profile
               </button>
             </div>
           </div>
