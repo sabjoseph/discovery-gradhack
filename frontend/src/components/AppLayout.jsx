@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { initials } from "../lib/api";
+import FloatingCharacter from "./FloatingCharacter";
 
 const links = [
   { to: "/app", label: "Home", end: true },
@@ -83,6 +84,7 @@ export default function AppLayout() {
           </NavLink>
         ))}
       </nav>
+      <FloatingCharacter />
     </div>
   );
 }

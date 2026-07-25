@@ -1,0 +1,237 @@
+.bb-float {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 5.5rem;
+  z-index: 1200;
+}
+
+.bb-char {
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  animation: bbBob 2.4s ease-in-out infinite;
+  transform-origin: center bottom;
+  transition: transform 0.2s ease;
+}
+
+.bb-char img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+.bb-char:hover {
+  transform: scale(1.1);
+  animation: bbWave 0.45s ease-in-out infinite;
+}
+
+.bb-char.is-thinking {
+  animation: bbThink 0.9s ease-in-out infinite;
+}
+
+.bb-char.is-thinking:hover {
+  transform: none;
+}
+
+@keyframes bbBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes bbWave {
+  0%,
+  100% {
+    transform: scale(1.1) rotate(-4deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(6deg);
+  }
+}
+
+@keyframes bbThink {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.06) rotate(-8deg);
+  }
+  75% {
+    transform: scale(0.96) rotate(8deg);
+  }
+}
+
+.bb-chat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1190;
+  background: rgba(0, 27, 68, 0.28);
+}
+
+.bb-chat-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 5rem;
+  z-index: 1201;
+  width: min(380px, calc(100vw - 2rem));
+  max-height: min(520px, calc(100vh - 7rem));
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 18px 48px rgba(0, 27, 68, 0.18);
+}
+
+.bb-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.bb-chat-head .bb-char {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.bb-chat-head .bb-char:hover {
+  transform: none;
+  animation: inherit;
+}
+
+.bb-chat-head-text strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--secondary);
+}
+
+.bb-chat-head-text small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.bb-chat-close {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--secondary);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bb-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 220px;
+}
+
+.bb-chat-empty {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  text-align: center;
+  margin: auto 0;
+  padding: 1rem 0.5rem;
+}
+
+.bb-msg {
+  max-width: 88%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bb-msg-user {
+  align-self: flex-end;
+  background: var(--primary);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.bb-msg-assistant {
+  align-self: flex-start;
+  background: #f1f5f9;
+  color: var(--secondary);
+  border-bottom-left-radius: 4px;
+}
+
+.bb-chat-form {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.bb-chat-input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.65rem 0.9rem;
+  font: inherit;
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.bb-chat-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(123, 188, 67, 0.18);
+}
+
+.bb-chat-send {
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.bb-chat-send:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+@media (max-width: 720px) {
+  .bb-float {
+    right: 0.85rem;
+    bottom: 5.25rem;
+  }
+
+  .bb-chat-panel {
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    bottom: 4.75rem;
+  }
+}

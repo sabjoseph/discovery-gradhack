@@ -71,13 +71,36 @@ export default function NamePicker() {
     };
   }, [debouncedQuery]);
 
-  function continueToDashboard() {
+  async function activateCustomer(person) {
+    if (!supabase) {
+      setError("Supabase is not configured.");
+      return false;
+    }
+
+    const token = crypto.randomUUID();
+    const { error: sessionError } = await supabase
+      .from("customer_sessions")
+      .insert({
+        token,
+        customer_id: String(person.id),
+      });
+
+    if (sessionError) {
+      setError(sessionError.message || "Could not start your session.");
+      return false;
+    }
+
+    setCustomer({ id: person.id, name: person.name, token });
+    return true;
+  }
+
+  async function continueToDashboard() {
     if (!selected) {
       setError("Select your name to continue.");
       return;
     }
-    setCustomer({ id: selected.id, name: selected.name });
-    navigate("/app");
+    const ok = await activateCustomer(selected);
+    if (ok) navigate("/app");
   }
 
   return (
@@ -187,9 +210,9 @@ export default function NamePicker() {
                       setSelected(person);
                       setError("");
                     }}
-                    onDoubleClick={() => {
-                      setCustomer({ id: person.id, name: person.name });
-                      navigate("/app");
+                    onDoubleClick={async () => {
+                      const ok = await activateCustomer(person);
+                      if (ok) navigate("/app");
                     }}
                   >
                     <span className="np-result-avatar">

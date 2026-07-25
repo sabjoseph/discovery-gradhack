@@ -48,6 +48,17 @@ export const api = {
   getMilestones: (customerId) => get(`/api/milestones/${customerId}`),
   getProfile: (customerId) => get(`/api/profile/${customerId}`),
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),
+  chatAssistant: async (body) => {
+    try {
+      const { data } = await client.post("/api/chat-assistant", body, {
+        timeout: 60000,
+      });
+      return data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      throw new Error(message);
+    }
+  },
 };
 
 export function formatCurrency(value) {
