@@ -143,7 +143,7 @@ router.get("/:customerId", async (req, res) => {
       }));
 
     const pantryItems = pantry || [];
-    const expiringItems = pantryItems
+    const pantryWithExpiry = pantryItems
       .map((p) => {
         const daysLeft = daysUntilFrom(p.expiry_estimate, datasetEnd);
         return {
@@ -155,8 +155,18 @@ router.get("/:customerId", async (req, res) => {
           category: p.products?.categories?.subcategory || "Uncategorised",
         };
       })
-      .filter((p) => p.daysLeft !== null && p.daysLeft >= 0 && p.daysLeft <= 3)
+      .filter((p) => p.daysLeft !== null);
+
+    const expiredItems = pantryWithExpiry
+      .filter((p) => p.daysLeft < 0)
       .sort((a, b) => a.daysLeft - b.daysLeft);
+    const expiringItems = pantryWithExpiry
+      .filter((p) => p.daysLeft >= 0 && p.daysLeft <= 60)
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+    const freshCount = Math.max(
+      0,
+      pantryItems.length - expiredItems.length - expiringItems.length
+    );
 
     const pantryCats = new Set(
       pantryItems.map((p) => p.products?.category_id).filter((id) => id != null)
@@ -211,6 +221,13 @@ router.get("/:customerId", async (req, res) => {
       }
     }
 
+    const healthGoals = Array.isArray(profile?.health_goals)
+      ? profile.health_goals.filter((x) => typeof x === "string")
+      : [];
+    const dietaryPreferences = Array.isArray(profile?.dietary_preferences)
+      ? profile.dietary_preferences.filter((x) => typeof x === "string")
+      : [];
+
     const budgetMonthly =
       profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
     const budgetSection =
@@ -222,12 +239,8 @@ router.get("/:customerId", async (req, res) => {
             usedPct: budgetMonthly
               ? Math.min(100, Math.round((monthSpend / budgetMonthly) * 100))
               : 0,
-            dietaryPreferences: Array.isArray(profile.dietary_preferences)
-              ? profile.dietary_preferences.filter((x) => typeof x === "string")
-              : [],
-            healthGoals: Array.isArray(profile.health_goals)
-              ? profile.health_goals.filter((x) => typeof x === "string")
-              : [],
+            dietaryPreferences,
+            healthGoals,
           }
         : null;
 
@@ -241,6 +254,8 @@ router.get("/:customerId", async (req, res) => {
       data: {
         periodDays: days,
         datasetEnd: datasetEnd.toISOString(),
+        healthGoals,
+        dietaryPreferences,
         spend: {
           ...spend,
           healthyPct: spend.total
@@ -257,7 +272,10 @@ router.get("/:customerId", async (req, res) => {
         pantry: {
           count: pantryItems.length,
           stockedPct: pantryStockedPct,
+          expiredCount: expiredItems.length,
           expiringSoon: expiringItems.length,
+          freshCount,
+          expiredItems: expiredItems.slice(0, 5),
           expiringItems,
         },
         topRecipes,
