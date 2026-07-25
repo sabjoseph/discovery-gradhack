@@ -17,7 +17,7 @@ export default function ProgressRing({
 
   let goalAngle = null;
   if (goal != null && max > 0) {
-    goalAngle = (Math.min(1, Math.max(0, goal / max)) * 360) - 90;
+    goalAngle = Math.min(1, Math.max(0, goal / max)) * 360 - 90;
   }
 
   return (

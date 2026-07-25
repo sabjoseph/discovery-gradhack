@@ -50,6 +50,8 @@ export const api = {
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),
   getAnalytics: (customerId, days = 90) =>
     get(`/api/analytics/${customerId}`, { days }),
+  acceptAnalyticsSwap: (customerId, swap) =>
+    post(`/api/analytics/${customerId}/swaps/accept`, swap),
 };
 
 export function formatCurrency(value) {

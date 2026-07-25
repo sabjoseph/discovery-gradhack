@@ -47,7 +47,6 @@
   color: var(--danger);
 }
 
-/* Progress ring primitive */
 .progress-ring {
   position: relative;
   display: inline-grid;
@@ -90,13 +89,17 @@
   letter-spacing: 0.04em;
 }
 
-/* Hero */
 .an-hero {
   padding: 1.35rem 1.45rem;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: center;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.88),
+    rgba(232, 245, 233, 0.55)
+  );
 }
 
 .an-score-block {
@@ -118,12 +121,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  min-width: 10rem;
+  min-width: 11rem;
 }
 
 .an-delta {
-  font-weight: 800;
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  color: var(--text-muted);
 }
 
 .an-delta.up {
@@ -131,7 +136,48 @@
 }
 
 .an-delta.down {
-  color: var(--danger);
+  color: #b54a4a;
+}
+
+.an-delta.flat {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.an-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-width: 22rem;
+}
+
+.an-compare-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.an-compare.up .an-compare-title {
+  color: var(--primary-deep);
+}
+
+.an-compare.down .an-compare-title {
+  color: #b54a4a;
+}
+
+.an-compare.flat .an-compare-title {
+  color: var(--text-muted);
+}
+
+.an-compare-detail {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.an-compare-detail strong {
+  color: var(--secondary);
+  font-weight: 700;
 }
 
 .an-status {
@@ -158,6 +204,26 @@
   border-radius: 999px;
 }
 
+.an-formula-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-top: 0.35rem;
+  color: var(--primary-deep);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.an-formula {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .an-triple {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -172,7 +238,7 @@
   gap: 0.35rem;
   padding: 0.65rem 0.4rem;
   border-radius: 14px;
-  background: rgba(248, 250, 252, 0.7);
+  background: rgba(248, 250, 252, 0.75);
 }
 
 .an-goal-ring h3 {
@@ -185,6 +251,16 @@
   color: var(--text-muted);
 }
 
+.an-goal-ring p a {
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+.an-goal-ring .is-closed-label {
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
 .an-goal-ring .progress-ring-centre strong {
   font-size: 1.05rem;
 }
@@ -193,7 +269,6 @@
   font-size: 0.58rem;
 }
 
-/* Cards */
 .an-card {
   padding: 1.25rem 1.35rem;
 }
@@ -225,6 +300,17 @@
 
 .an-pct-suffix {
   font-size: 0.65rem !important;
+}
+
+.an-insight {
+  margin: -0.35rem 0 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(123, 188, 67, 0.12);
+  color: var(--secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .an-chart {
@@ -270,7 +356,6 @@
   text-align: center;
 }
 
-/* Swaps */
 .an-swaps {
   padding-bottom: 1.5rem;
 }
@@ -283,7 +368,11 @@
   margin-bottom: 1.25rem;
   padding: 1rem;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(232, 245, 233, 0.65), rgba(238, 243, 248, 0.8));
+  background: linear-gradient(
+    135deg,
+    rgba(232, 245, 233, 0.65),
+    rgba(238, 243, 248, 0.8)
+  );
 }
 
 .an-swap-arrow {
@@ -325,8 +414,9 @@
 
 .an-swap-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
   gap: 0.75rem;
+  align-items: center;
   padding: 0.9rem 1rem;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -382,6 +472,10 @@
 
   .an-score-meta {
     align-items: center;
+  }
+
+  .an-formula-toggle {
+    text-align: center;
   }
 
   .an-triple {
