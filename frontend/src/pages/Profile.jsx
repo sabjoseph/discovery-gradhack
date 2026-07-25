@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { api, formatCurrency, formatDate, initials } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
@@ -195,7 +195,9 @@ function ChipField({
 export default function Profile() {
   const { customer, setCustomer } = useCustomer();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const isSetup = searchParams.get("setup") === "1";
   const initialTab = SETTINGS_TABS.some((t) => t.id === searchParams.get("tab"))
     ? searchParams.get("tab")
     : "account";
@@ -286,17 +288,20 @@ export default function Profile() {
   const category = bmiCategory(bmi);
   const markerPct = bmiMarkerPct(bmi);
 
-  const profileStrength = useMemo(() => {
-    let score = 10;
-    if (form.avatar_url) score += 10;
-    if (form.budget_monthly !== "" && Number(form.budget_monthly) >= 0) score += 20;
-    if (form.age !== "") score += 10;
-    if (form.weight_kg !== "" && form.height_cm !== "") score += 15;
-    if (form.dietary_preferences.length) score += 15;
-    if (form.health_goals.length) score += 15;
-    if (form.milestone_alerts || form.recommendation_nudges) score += 5;
-    return Math.min(100, score);
-  }, [form]);
+  const profileCompleteness = useMemo(() => {
+    const checks = [
+      Boolean(customer?.name),
+      Boolean(form.avatar_url),
+      form.budget_monthly !== "" && !Number.isNaN(Number(form.budget_monthly)),
+      form.age !== "" && !Number.isNaN(Number(form.age)),
+      form.weight_kg !== "" && !Number.isNaN(Number(form.weight_kg)),
+      form.height_cm !== "" && !Number.isNaN(Number(form.height_cm)),
+      form.dietary_preferences.length > 0,
+      form.health_goals.length > 0,
+    ];
+    const filled = checks.filter(Boolean).length;
+    return Math.round((filled / checks.length) * 100);
+  }, [form, customer?.name]);
 
   const activeAccountPanel =
     ACCOUNT_PANELS.find((p) => p.id === accountPanel) || ACCOUNT_PANELS[0];
@@ -349,6 +354,11 @@ export default function Profile() {
     }
     setBudgetError("");
     return true;
+  }
+
+  function skipSetup() {
+    setSearchParams({}, { replace: true });
+    navigate("/app");
   }
 
   function onCancel() {
@@ -414,6 +424,9 @@ export default function Profile() {
       setForm(nextForm);
       setCustomer({ ...customer, avatarUrl: savedAvatar });
       setSaved(true);
+      if (isSetup) {
+        setSearchParams({}, { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Save failed");
     } finally {
@@ -463,10 +476,30 @@ export default function Profile() {
         <form className="glass pf-main" onSubmit={onSubmit}>
           <div className="pf-main-head">
             <div>
-              <h1>{headTitle}</h1>
-              <p>{headBlurb}</p>
+              <h1>{isSetup ? "Finish your profile" : headTitle}</h1>
+              <p>
+                {isSetup
+                  ? "Fill in your details below — or skip and come back later."
+                  : headBlurb}
+              </p>
             </div>
+            {isSetup && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={skipSetup}
+              >
+                Skip for now
+              </button>
+            )}
           </div>
+
+          {isSetup && (
+            <div className="pf-toast pf-setup-banner" role="status">
+              Welcome, {customer.name}. Complete your profile to personalise
+              BiteBetter — or skip and explore the app.
+            </div>
+          )}
 
           {tab === "account" && (
             <nav className="pf-subtabs" aria-label="Account sections">
@@ -538,10 +571,10 @@ export default function Profile() {
                       <div className="pf-strength">
                         <div className="pf-strength-top">
                           <span>Profile completeness</span>
-                          <strong>{profileStrength}%</strong>
+                          <strong>{profileCompleteness}%</strong>
                         </div>
                         <div className="pf-strength-bar">
-                          <div style={{ width: `${profileStrength}%` }} />
+                          <div style={{ width: `${profileCompleteness}%` }} />
                         </div>
                       </div>
                     </div>

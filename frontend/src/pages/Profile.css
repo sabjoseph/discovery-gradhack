@@ -143,6 +143,11 @@
   padding: 1.15rem 1.25rem 0.85rem;
   background: linear-gradient(135deg, rgba(123, 188, 67, 0.14), rgba(255, 255, 255, 0.35));
   border-bottom: 1px solid rgba(0, 27, 68, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .pf-main-head h1 {
@@ -154,6 +159,10 @@
   color: var(--text-muted);
   max-width: 34rem;
   line-height: 1.45;
+}
+
+.pf-setup-banner {
+  margin: 0.85rem 1.25rem 0;
 }
 
 .pf-subtabs {
@@ -243,7 +252,7 @@
   font-size: 1.5rem;
   overflow: hidden;
   flex-shrink: 0;
-  border: 3px solid rgba(123, 188, 67, 0.35);
+  border: none;
 }
 
 .pf-photo img {
