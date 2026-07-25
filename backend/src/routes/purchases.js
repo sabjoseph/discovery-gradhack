@@ -204,7 +204,15 @@ router.get("/:customerId/summary", async (req, res) => {
             `
             purchase_date,
             retailers ( name ),
-            basket_items ( line_total )
+            basket_items (
+              line_total,
+              products (
+                categories (
+                  main_category,
+                  health_classifications ( classification )
+                )
+              )
+            )
           `
           )
           .eq("customer_id", customerId)
@@ -214,6 +222,37 @@ router.get("/:customerId/summary", async (req, res) => {
     if (basketsError) throw basketsError;
 
     const active = spendStatsForWindow(recentBaskets, windowStart, datasetEnd);
+    const healthMix = { healthy: 0, neutral: 0, unhealthy: 0, total: 0 };
+
+    for (const basket of recentBaskets || []) {
+      const purchaseDate = new Date(basket.purchase_date);
+      if (purchaseDate < windowStart || purchaseDate > datasetEnd) continue;
+
+      for (const item of basket.basket_items || []) {
+        const category = item.products?.categories;
+        const nested = category?.health_classifications;
+        const classification = Array.isArray(nested)
+          ? nested[0]?.classification
+          : nested?.classification;
+        const tag = classifyFromLabel(classification, category?.main_category);
+        const amount = Number(item.line_total || 0);
+        healthMix[tag] += amount;
+        healthMix.total += amount;
+      }
+    }
+
+    const healthMixWithPct = {
+      ...healthMix,
+      healthyPct: healthMix.total
+        ? Math.round((healthMix.healthy / healthMix.total) * 100)
+        : 0,
+      neutralPct: healthMix.total
+        ? Math.round((healthMix.neutral / healthMix.total) * 100)
+        : 0,
+      unhealthyPct: healthMix.total
+        ? Math.round((healthMix.unhealthy / healthMix.total) * 100)
+        : 0,
+    };
 
     const budgetMonthly =
       profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
@@ -239,6 +278,7 @@ router.get("/:customerId/summary", async (req, res) => {
         remaining,
         usedPct,
         basketCount: active.basketCount,
+        healthMix: healthMixWithPct,
       },
     });
   } catch (err) {

@@ -233,16 +233,14 @@ export default function Profile() {
       .getProfile(customer.id)
       .then((profileRes) => {
         if (!alive) return;
-        const profile = res.data.profile || {};
-        const notifications = res.data.notifications || {};
+        const profile = profileRes.data.profile || {};
+        const notifications = profileRes.data.notifications || {};
         // Present only for customers with no saved profile row yet.
-        const inferred = res.data.estimates || null;
+        const inferred = profileRes.data.estimates || null;
         const estimatedBudget =
           profile.budget_monthly == null && inferred?.budget_monthly != null
             ? String(inferred.budget_monthly)
             : null;
-        const profile = profileRes.data.profile || {};
-        const notifications = profileRes.data.notifications || {};
         const avatarUrl = profile.avatar_url || null;
         const next = {
           budget_monthly:
@@ -428,10 +426,9 @@ export default function Profile() {
           form.weight_kg === "" ? "" : String(Number(form.weight_kg)),
         height_cm:
           form.height_cm === "" ? "" : String(Number(form.height_cm)),
-      });
-      setBudgetConfirmed(true);
         avatar_url: savedAvatar,
       };
+      setBudgetConfirmed(true);
       setBaseline(nextForm);
       setForm(nextForm);
       setCustomer({ ...customer, avatarUrl: savedAvatar });
