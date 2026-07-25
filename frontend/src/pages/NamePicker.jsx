@@ -369,9 +369,7 @@ export default function NamePicker() {
           <span>© {new Date().getFullYear()} Bite better, be better.</span>
         </div>
         <div className="np-footer-links">
-          <span>Privacy Policy</span>
-          <span>Terms of Service</span>
-          <span>Contact Us</span>
+          <span>Hi, if you see this please hire us - we have LinkedIn ;)</span>
         </div>
       </footer>
     </div>
