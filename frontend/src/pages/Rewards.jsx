@@ -96,6 +96,7 @@ export default function Rewards() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [redeemHelpOpen, setRedeemHelpOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -165,52 +166,6 @@ export default function Rewards() {
 
         {error && <div className="error-state glass rw-error">{error}</div>}
 
-        <section className="glass rw-catalogue">
-          <div className="rw-section-head">
-            <h2>What you can redeem</h2>
-            <p>
-              Example rewards for the points you earn from milestones. You have{" "}
-              <strong>{pointsEarned} pts</strong> so far
-              {pointsAvailable > 0 ? ` of ${pointsAvailable} pts available` : ""}.
-            </p>
-          </div>
-          <div className="rw-reward-grid">
-            {EXAMPLE_REWARDS.map((reward) => {
-              const canAfford = pointsEarned >= reward.points;
-              return (
-                <article
-                  key={reward.name}
-                  className={`rw-reward-item ${canAfford ? "is-affordable" : ""}`}
-                >
-                  <div>
-                    <h3>{reward.name}</h3>
-                    <p>{reward.detail}</p>
-                  </div>
-                  <div className="rw-reward-cost">
-                    <strong>{reward.points}</strong>
-                    <span>pts</span>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="glass rw-earn">
-          <div className="rw-section-head">
-            <h2>How you earn points</h2>
-            <p>Each milestone pays out when you hit its target.</p>
-          </div>
-          <div className="rw-earn-list">
-            {allMilestones.map((m) => (
-              <div key={m.id} className="rw-earn-row">
-                <span>{m.name}</span>
-                <strong>+{m.rewardValue} pts</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className="glass rw-glance">
           <h2>This month at a glance</h2>
           <div className="rw-glance-grid">
@@ -237,42 +192,145 @@ export default function Rewards() {
           </div>
         </section>
 
-        <section className="rw-section">
-          <div className="rw-section-head">
-            <h2>In progress</h2>
-            <p>Keep going — progress updates from your real baskets and activity.</p>
-          </div>
-          {inProgress.length === 0 ? (
-            <div className="glass rw-empty">
-              All current milestones unlocked — nice work.
-            </div>
-          ) : (
-            <div className="rw-list">
-              {inProgress.map((m) => (
-                <MilestoneCard key={m.id} milestone={m} />
-              ))}
-            </div>
-          )}
-        </section>
+        <div className="rw-body">
+          <div className="rw-main">
+            <section className="rw-section">
+              <div className="rw-section-head">
+                <h2>In progress</h2>
+                <p>
+                  Keep going — progress updates from your real baskets and
+                  activity.
+                </p>
+              </div>
+              {inProgress.length === 0 ? (
+                <div className="glass rw-empty">
+                  All current milestones unlocked — nice work.
+                </div>
+              ) : (
+                <div className="rw-grid-scroll">
+                  <div className="rw-card-grid">
+                    {inProgress.map((m) => (
+                      <MilestoneCard key={m.id} milestone={m} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
 
-        <section className="rw-section">
-          <div className="rw-section-head">
-            <h2>Achieved</h2>
-            <p>Rewards land as pending until they&apos;re issued or redeemed.</p>
+            <section className="rw-section">
+              <div className="rw-section-head">
+                <h2>Achieved</h2>
+                <p>
+                  Rewards land as pending until they&apos;re issued or redeemed.
+                </p>
+              </div>
+              {completed.length === 0 ? (
+                <div className="glass rw-empty">
+                  No milestones unlocked yet — your progress bars above will
+                  fill as you shop.
+                </div>
+              ) : (
+                <div className="rw-grid-scroll">
+                  <div className="rw-card-grid">
+                    {completed.map((m) => (
+                      <MilestoneCard key={m.id} milestone={m} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
-          {completed.length === 0 ? (
-            <div className="glass rw-empty">
-              No milestones unlocked yet — your progress bars above will fill as you shop.
+
+          <aside className="glass rw-side">
+            <div className="rw-section-head">
+              <h2>What you can redeem</h2>
+              <p>
+                You have <strong>{pointsEarned}</strong>
+                {pointsAvailable > 0 ? ` of ${pointsAvailable}` : ""} pts
+              </p>
+              <button
+                type="button"
+                className="rw-help-link"
+                onClick={() => setRedeemHelpOpen(true)}
+              >
+                How to redeem points
+              </button>
             </div>
-          ) : (
-            <div className="rw-list">
-              {completed.map((m) => (
-                <MilestoneCard key={m.id} milestone={m} />
+
+            <div className="rw-side-scroll">
+              <div className="rw-reward-stack">
+                {EXAMPLE_REWARDS.map((reward) => {
+                  const canAfford = pointsEarned >= reward.points;
+                  return (
+                    <article
+                      key={reward.name}
+                      className={`rw-reward-item ${canAfford ? "is-affordable" : ""}`}
+                    >
+                      <div>
+                        <h3>{reward.name}</h3>
+                        <p>{reward.detail}</p>
+                      </div>
+                      <div className="rw-reward-cost">
+                        <strong>{reward.points}</strong>
+                        <span>pts</span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      {redeemHelpOpen && (
+        <div
+          className="rw-modal-backdrop"
+          role="presentation"
+          onClick={() => setRedeemHelpOpen(false)}
+        >
+          <div
+            className="glass rw-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rw-redeem-help-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="rw-modal-head">
+              <h2 id="rw-redeem-help-title">How to redeem points</h2>
+              <button
+                type="button"
+                className="rw-modal-close"
+                onClick={() => setRedeemHelpOpen(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <p className="rw-modal-lead">
+              Complete milestones to earn points. When you have enough, redeem
+              them for the rewards listed in the sidebar — affordable options
+              highlight in green.
+            </p>
+            <h3>How you earn</h3>
+            <div className="rw-earn-list">
+              {allMilestones.map((m) => (
+                <div key={m.id} className="rw-earn-row">
+                  <span>{m.name}</span>
+                  <strong>+{m.rewardValue} pts</strong>
+                </div>
               ))}
             </div>
-          )}
-        </section>
-      </div>
+            <button
+              type="button"
+              className="btn btn-primary rw-modal-done"
+              onClick={() => setRedeemHelpOpen(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

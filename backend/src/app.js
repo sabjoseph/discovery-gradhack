@@ -9,6 +9,7 @@ const dashboardRouter = require("./routes/dashboard");
 const recommendationsRouter = require("./routes/recommendations");
 const milestonesRouter = require("./routes/milestones");
 const profileRouter = require("./routes/profile");
+const analyticsRouter = require("./routes/analytics");
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/milestones", milestonesRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/analytics", analyticsRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);

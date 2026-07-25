@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { initials } from "../lib/api";
@@ -8,16 +9,45 @@ const links = [
   { to: "/app/recipes", label: "Recipes" },
   { to: "/app/purchases", label: "Purchases" },
   { to: "/app/rewards", label: "Rewards" },
-  { to: "/app/profile", label: "Profile" },
+  { to: "/app/analytics", label: "Analytics" },
 ];
 
 export default function AppLayout() {
   const { customer, clearCustomer } = useCustomer();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
-  function switchUser() {
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    function onPointerDown(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  function signOut() {
+    setMenuOpen(false);
     clearCustomer();
     navigate("/");
+  }
+
+  function goToProfile() {
+    setMenuOpen(false);
+    navigate("/app/profile");
   }
 
   return (
@@ -47,21 +77,48 @@ export default function AppLayout() {
             ))}
           </nav>
 
-          <div className="user-chip">
-            <div className="avatar">{initials(customer?.name)}</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>
-                {customer?.name}
+          <div className="user-menu" ref={menuRef}>
+            <button
+              type="button"
+              className={`avatar avatar-btn${menuOpen ? " is-open" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Account menu"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {initials(customer?.name)}
+            </button>
+
+            {menuOpen && (
+              <div className="user-dropdown" role="menu">
+                <div className="user-dropdown-head">
+                  <div className="avatar avatar-sm">{initials(customer?.name)}</div>
+                  <div>
+                    <strong>{customer?.name}</strong>
+                    <span>Signed in</span>
+                  </div>
+                </div>
+
+                <div className="user-dropdown-actions">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="user-dropdown-item"
+                    onClick={goToProfile}
+                  >
+                    Profile
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="user-dropdown-item is-danger"
+                    onClick={signOut}
+                  >
+                    Sign out
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={switchUser}
-                className="btn btn-sm btn-outline"
-                style={{ marginTop: "0.25rem", padding: "0.2rem 0.55rem" }}
-              >
-                Switch profile
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </header>

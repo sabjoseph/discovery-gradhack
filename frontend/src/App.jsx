@@ -12,6 +12,7 @@ import Recipes from "./pages/Recipes";
 import RecipeDetail from "./pages/RecipeDetail";
 import Rewards from "./pages/Rewards";
 import Profile from "./pages/Profile";
+import Analytics from "./pages/Analytics";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
               <Route element={<RequireCustomer />}>
                 <Route path="/app" element={<AppLayout />}>
                   <Route index element={<Dashboard />} />
+                  <Route path="analytics" element={<Analytics />} />
                   <Route path="purchases" element={<Purchases />} />
                   <Route path="pantry" element={<Pantry />} />
                   <Route path="recipes" element={<Recipes />} />

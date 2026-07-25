@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCustomer } from "../context/CustomerContext";
-import { api, formatCurrency, initials } from "../lib/api";
+import { api, formatCurrency } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
 import "./Profile.css";
 
@@ -29,6 +29,27 @@ const GOAL_SUGGESTIONS = [
 const SETTINGS_TABS = [
   { id: "account", label: "Account" },
   { id: "notifications", label: "Notifications" },
+];
+
+const ACCOUNT_PANELS = [
+  {
+    id: "basics",
+    label: "Basics",
+    title: "Basics",
+    blurb: "Who's signed in and your monthly food budget.",
+  },
+  {
+    id: "wellness",
+    label: "Wellness",
+    title: "Wellness",
+    blurb: "Age and body metrics used for your BMI readout.",
+  },
+  {
+    id: "preferences",
+    label: "Preferences",
+    title: "Preferences",
+    blurb: "Dietary needs and health goals that personalise BiteBetter.",
+  },
 ];
 
 function calcBmi(weightKg, heightCm) {
@@ -63,8 +84,14 @@ function ChipField({
   onRemove,
   placeholder,
   tone = "green",
+  emptyHint,
 }) {
   const [draft, setDraft] = useState("");
+  const [showMore, setShowMore] = useState(false);
+
+  const available = suggestions.filter((opt) => !values.includes(opt));
+  const visible = showMore ? available : available.slice(0, 3);
+  const hiddenCount = Math.max(0, available.length - visible.length);
 
   function submitDraft(e) {
     e.preventDefault();
@@ -77,6 +104,9 @@ function ChipField({
   return (
     <div className="pf-chip-field">
       <div className="pf-label">{label}</div>
+      {values.length === 0 && emptyHint ? (
+        <p className="pf-hint pf-chip-empty">{emptyHint}</p>
+      ) : null}
       <div className="pf-chips">
         {values.map((value) => (
           <button
@@ -89,19 +119,34 @@ function ChipField({
             <span aria-hidden="true">×</span>
           </button>
         ))}
-        {suggestions
-          .filter((opt) => !values.includes(opt))
-          .slice(0, 4)
-          .map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              className="pf-chip"
-              onClick={() => onToggle(opt)}
-            >
-              + {opt}
-            </button>
-          ))}
+        {visible.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            className="pf-chip"
+            onClick={() => onToggle(opt)}
+          >
+            + {opt}
+          </button>
+        ))}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="pf-chip pf-chip-more"
+            onClick={() => setShowMore(true)}
+          >
+            +{hiddenCount} more
+          </button>
+        )}
+        {showMore && available.length > 3 && (
+          <button
+            type="button"
+            className="pf-chip pf-chip-more"
+            onClick={() => setShowMore(false)}
+          >
+            Show less
+          </button>
+        )}
       </div>
       <form className="pf-chip-add" onSubmit={submitDraft}>
         <input
@@ -120,6 +165,7 @@ function ChipField({
 export default function Profile() {
   const { customer } = useCustomer();
   const [tab, setTab] = useState("account");
+  const [accountPanel, setAccountPanel] = useState("basics");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -192,6 +238,9 @@ export default function Profile() {
     return Math.min(100, score);
   }, [form]);
 
+  const activeAccountPanel =
+    ACCOUNT_PANELS.find((p) => p.id === accountPanel) || ACCOUNT_PANELS[0];
+
   function updateField(key, value) {
     setSaved(false);
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -251,7 +300,10 @@ export default function Profile() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    if (!validateBudget(form.budget_monthly)) return;
+    if (!validateBudget(form.budget_monthly)) {
+      if (tab === "account") setAccountPanel("basics");
+      return;
+    }
 
     setSaving(true);
     setSaved(false);
@@ -286,9 +338,12 @@ export default function Profile() {
 
   if (loading) return <LoadingBlock label="Loading profile…" />;
 
-  const nameParts = (customer.name || "").split(" ");
-  const firstName = nameParts[0] || customer.name;
-  const lastName = nameParts.slice(1).join(" ") || "—";
+  const headTitle =
+    tab === "account" ? activeAccountPanel.title : "Notifications";
+  const headBlurb =
+    tab === "account"
+      ? activeAccountPanel.blurb
+      : "Choose which BiteBetter nudges reach you.";
 
   return (
     <div className="pf">
@@ -297,7 +352,7 @@ export default function Profile() {
       <div className="pf-shell">
         <aside className="glass pf-side">
           <p className="pf-kicker">Settings</p>
-          <nav className="pf-tabs">
+          <nav className="pf-tabs" aria-label="Settings sections">
             {SETTINGS_TABS.map((item) => (
               <button
                 key={item.id}
@@ -309,64 +364,30 @@ export default function Profile() {
               </button>
             ))}
           </nav>
-
-          <div className="pf-overview">
-            <div className="pf-avatar">{initials(customer.name)}</div>
-            <h2>{customer.name}</h2>
-            <p className="pf-id">{customer.id}</p>
-
-            <div className="pf-strength">
-              <div className="pf-strength-top">
-                <span>Profile strength</span>
-                <strong>{profileStrength}%</strong>
-              </div>
-              <div className="pf-strength-bar">
-                <div style={{ width: `${profileStrength}%` }} />
-              </div>
-            </div>
-          </div>
-
-          {(form.health_goals.length > 0 ||
-            form.dietary_preferences.length > 0) && (
-            <div className="pf-focus">
-              <p className="pf-kicker">Current focus</p>
-              <div className="pf-chips">
-                {[...form.health_goals, ...form.dietary_preferences]
-                  .slice(0, 4)
-                  .map((tag) => (
-                    <span key={tag} className="pf-chip is-on tone-green">
-                      {tag}
-                    </span>
-                  ))}
-              </div>
-            </div>
-          )}
         </aside>
 
         <form className="glass pf-main" onSubmit={onSubmit}>
           <div className="pf-main-head">
             <div>
-              <h1>{tab === "account" ? "Edit Profile" : "Notifications"}</h1>
-              <p>
-                {tab === "account"
-                  ? "Update your budget, dietary preferences, and wellness targets."
-                  : "Choose which BiteBetter nudges reach you."}
-              </p>
-            </div>
-            <div className="pf-actions">
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={onCancel}
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
+              <h1>{headTitle}</h1>
+              <p>{headBlurb}</p>
             </div>
           </div>
+
+          {tab === "account" && (
+            <nav className="pf-subtabs" aria-label="Account sections">
+              {ACCOUNT_PANELS.map((panel) => (
+                <button
+                  key={panel.id}
+                  type="button"
+                  className={accountPanel === panel.id ? "is-active" : ""}
+                  onClick={() => setAccountPanel(panel.id)}
+                >
+                  {panel.label}
+                </button>
+              ))}
+            </nav>
+          )}
 
           {saved && (
             <div className="pf-toast" role="status">
@@ -375,53 +396,75 @@ export default function Profile() {
           )}
           {error && <div className="error-state pf-banner">{error}</div>}
 
-          {tab === "account" ? (
-            <>
-              <section className="pf-section">
-                <h3>Identity</h3>
-                <div className="pf-grid-2">
-                  <label>
-                    <span>First name</span>
-                    <input value={firstName} readOnly />
-                  </label>
-                  <label>
-                    <span>Surname</span>
-                    <input value={lastName} readOnly />
-                  </label>
-                </div>
-                <p className="pf-hint">
-                  Name comes from your customer record — use Switch profile to
-                  change who&apos;s signed in.
-                </p>
-              </section>
+          <div className="pf-body">
+            {tab === "account" && accountPanel === "basics" && (
+              <>
+                <section className="pf-section">
+                  <h3>Signed in</h3>
+                  <div className="pf-identity">
+                    <div className="pf-identity-row">
+                      <strong>{customer.name}</strong>
+                      <div className="pf-strength">
+                        <div className="pf-strength-top">
+                          <span>Profile completeness</span>
+                          <strong>{profileStrength}%</strong>
+                        </div>
+                        <div className="pf-strength-bar">
+                          <div style={{ width: `${profileStrength}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                    <span className="pf-identity-hint">
+                      Name comes from your customer record — use Sign out in the
+                      avatar menu to choose a different profile.
+                    </span>
+                  </div>
+                </section>
 
+                <section className="pf-section">
+                  <h3>Monthly budget</h3>
+                  <label className="pf-budget">
+                    <span>Food budget (ZAR)</span>
+                    <div className="pf-budget-input">
+                      <span>R</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={form.budget_monthly}
+                        onChange={(e) => {
+                          setSaved(false);
+                          setForm((prev) => ({
+                            ...prev,
+                            budget_monthly: e.target.value,
+                          }));
+                          validateBudget(e.target.value);
+                        }}
+                        placeholder="e.g. 3500"
+                      />
+                    </div>
+                  </label>
+                  {budgetError ? (
+                    <p className="pf-field-error">{budgetError}</p>
+                  ) : form.budget_monthly !== "" &&
+                    !Number.isNaN(Number(form.budget_monthly)) ? (
+                    <p className="pf-hint">
+                      About {formatCurrency(form.budget_monthly)} per month for
+                      groceries.
+                    </p>
+                  ) : (
+                    <p className="pf-hint">
+                      Optional — leave blank to skip budget-aware
+                      recommendations.
+                    </p>
+                  )}
+                </section>
+              </>
+            )}
+
+            {tab === "account" && accountPanel === "wellness" && (
               <section className="pf-section">
                 <h3>Body metrics</h3>
-                <div className="pf-metrics-cards">
-                  <div>
-                    <span>Weight</span>
-                    <strong>
-                      {form.weight_kg !== "" ? `${form.weight_kg} kg` : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Height</span>
-                    <strong>
-                      {form.height_cm !== "" ? `${form.height_cm} cm` : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Age</span>
-                    <strong>{form.age !== "" ? form.age : "—"}</strong>
-                  </div>
-                  <div>
-                    <span>BMI</span>
-                    <strong className={category ? `bmi-${category.key}` : ""}>
-                      {bmi != null ? bmi.toFixed(1) : "—"}
-                    </strong>
-                  </div>
-                </div>
-
                 <div className="pf-grid-3">
                   <label>
                     <span>Age</span>
@@ -489,130 +532,107 @@ export default function Profile() {
                   </div>
                 </div>
               </section>
+            )}
 
+            {tab === "account" && accountPanel === "preferences" && (
+              <>
+                <section className="pf-section">
+                  <h3>Dietary preferences</h3>
+                  <ChipField
+                    label="Allergies & preferences"
+                    values={form.dietary_preferences}
+                    suggestions={DIET_SUGGESTIONS}
+                    tone="coral"
+                    placeholder="Add a preference or allergy…"
+                    emptyHint="Add a preference to personalise recommendations."
+                    onToggle={(v) => toggleList("dietary_preferences", v)}
+                    onAdd={(v) => addToList("dietary_preferences", v)}
+                    onRemove={(v) => removeFromList("dietary_preferences", v)}
+                  />
+                </section>
+
+                <section className="pf-section">
+                  <h3>Health goals</h3>
+                  <ChipField
+                    label="What you're working toward"
+                    values={form.health_goals}
+                    suggestions={GOAL_SUGGESTIONS}
+                    tone="green"
+                    placeholder="Add a health goal…"
+                    emptyHint="Add a goal so recommendations stay on target."
+                    onToggle={(v) => toggleList("health_goals", v)}
+                    onAdd={(v) => addToList("health_goals", v)}
+                    onRemove={(v) => removeFromList("health_goals", v)}
+                  />
+                </section>
+              </>
+            )}
+
+            {tab === "notifications" && (
               <section className="pf-section">
-                <h3>Monthly budget</h3>
-                <label className="pf-budget">
-                  <span>Food budget (ZAR)</span>
-                  <div className="pf-budget-input">
-                    <span>R</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="50"
-                      value={form.budget_monthly}
-                      onChange={(e) => {
+                <h3>Alert preferences</h3>
+                <div className="pf-toggles">
+                  <label className="pf-toggle">
+                    <div>
+                      <strong>Milestone alerts</strong>
+                      <p>Get notified when you unlock a rewards milestone.</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={form.milestone_alerts}
+                      className={`pf-switch ${form.milestone_alerts ? "is-on" : ""}`}
+                      onClick={() => {
                         setSaved(false);
                         setForm((prev) => ({
                           ...prev,
-                          budget_monthly: e.target.value,
+                          milestone_alerts: !prev.milestone_alerts,
                         }));
-                        validateBudget(e.target.value);
                       }}
-                      placeholder="e.g. 3500"
-                    />
-                  </div>
-                </label>
-                {budgetError ? (
-                  <p className="pf-field-error">{budgetError}</p>
-                ) : form.budget_monthly !== "" && !Number.isNaN(Number(form.budget_monthly)) ? (
-                  <p className="pf-hint">
-                    About {formatCurrency(form.budget_monthly)} per month for
-                    groceries.
-                  </p>
-                ) : (
-                  <p className="pf-hint">
-                    Optional — leave blank to skip budget-aware recommendations.
-                  </p>
-                )}
+                    >
+                      <span />
+                    </button>
+                  </label>
+
+                  <label className="pf-toggle">
+                    <div>
+                      <strong>Recommendation nudges</strong>
+                      <p>Occasional suggestions based on your pantry matches.</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={form.recommendation_nudges}
+                      className={`pf-switch ${form.recommendation_nudges ? "is-on" : ""}`}
+                      onClick={() => {
+                        setSaved(false);
+                        setForm((prev) => ({
+                          ...prev,
+                          recommendation_nudges: !prev.recommendation_nudges,
+                        }));
+                      }}
+                    >
+                      <span />
+                    </button>
+                  </label>
+                </div>
               </section>
+            )}
+          </div>
 
-              <section className="pf-section">
-                <h3>Dietary preferences</h3>
-                <ChipField
-                  label="Allergies & preferences"
-                  values={form.dietary_preferences}
-                  suggestions={DIET_SUGGESTIONS}
-                  tone="coral"
-                  placeholder="Add a preference or allergy…"
-                  onToggle={(v) => toggleList("dietary_preferences", v)}
-                  onAdd={(v) => addToList("dietary_preferences", v)}
-                  onRemove={(v) => removeFromList("dietary_preferences", v)}
-                />
-              </section>
-
-              <section className="pf-section">
-                <h3>Health goals</h3>
-                <ChipField
-                  label="What you're working toward"
-                  values={form.health_goals}
-                  suggestions={GOAL_SUGGESTIONS}
-                  tone="green"
-                  placeholder="Add a health goal…"
-                  onToggle={(v) => toggleList("health_goals", v)}
-                  onAdd={(v) => addToList("health_goals", v)}
-                  onRemove={(v) => removeFromList("health_goals", v)}
-                />
-              </section>
-
-              <div className="pf-tip">
-                <strong>Pro tip</strong>
-                <span>
-                  Keep your budget and goals current — recommendations and
-                  milestone filters use them on every visit.
-                </span>
-              </div>
-            </>
-          ) : (
-            <section className="pf-section">
-              <h3>Alert preferences</h3>
-              <div className="pf-toggles">
-                <label className="pf-toggle">
-                  <div>
-                    <strong>Milestone alerts</strong>
-                    <p>Get notified when you unlock a rewards milestone.</p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={form.milestone_alerts}
-                    className={`pf-switch ${form.milestone_alerts ? "is-on" : ""}`}
-                    onClick={() => {
-                      setSaved(false);
-                      setForm((prev) => ({
-                        ...prev,
-                        milestone_alerts: !prev.milestone_alerts,
-                      }));
-                    }}
-                  >
-                    <span />
-                  </button>
-                </label>
-
-                <label className="pf-toggle">
-                  <div>
-                    <strong>Recommendation nudges</strong>
-                    <p>Occasional suggestions based on your pantry matches.</p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={form.recommendation_nudges}
-                    className={`pf-switch ${form.recommendation_nudges ? "is-on" : ""}`}
-                    onClick={() => {
-                      setSaved(false);
-                      setForm((prev) => ({
-                        ...prev,
-                        recommendation_nudges: !prev.recommendation_nudges,
-                      }));
-                    }}
-                  >
-                    <span />
-                  </button>
-                </label>
-              </div>
-            </section>
-          )}
+          <div className="pf-actions-bar">
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={onCancel}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
