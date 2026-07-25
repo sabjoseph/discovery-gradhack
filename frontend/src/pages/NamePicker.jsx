@@ -7,6 +7,10 @@ import "./NamePicker.css";
 
 const DEBOUNCE_MS = 300;
 
+function hasValidName(name) {
+  return typeof name === "string" && /\p{L}/u.test(name);
+}
+
 export default function NamePicker() {
   const [mode, setMode] = useState("search"); // search | signup
   const [query, setQuery] = useState("");
@@ -64,9 +68,12 @@ export default function NamePicker() {
         setError(queryError.message || "Could not load customers.");
         setCustomers([]);
       } else {
-        setCustomers(data || []);
+        const validCustomers = (data || []).filter((person) =>
+          hasValidName(person.name)
+        );
+        setCustomers(validCustomers);
         setSelected((prev) =>
-          prev && (data || []).some((c) => c.id === prev.id) ? prev : null
+          prev && validCustomers.some((c) => c.id === prev.id) ? prev : null
         );
       }
 
@@ -130,6 +137,10 @@ export default function NamePicker() {
     const last = surname.trim();
     if (!first || !last) {
       setError("Enter your first name and surname.");
+      return;
+    }
+    if (!hasValidName(first) || !hasValidName(last)) {
+      setError("Please enter a valid first name and surname.");
       return;
     }
 

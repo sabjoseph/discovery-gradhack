@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { api } from "../lib/api";
 import { supabase } from "../lib/supabase";
@@ -76,6 +76,20 @@ function pantryMetaLine(item) {
   return null;
 }
 
+function expiryTone(item) {
+  if (!item) return "fresh";
+  if (item.expired || (item.daysLeft != null && item.daysLeft < 0)) {
+    return "expired";
+  }
+  if (
+    item.expiringSoon ||
+    (item.daysLeft != null && item.daysLeft >= 0 && item.daysLeft <= 60)
+  ) {
+    return "soon";
+  }
+  return "fresh";
+}
+
 function expiryWhenLabel(item) {
   if (item.expired) {
     const date = formatShortDate(item.expiryEstimate);
@@ -83,7 +97,7 @@ function expiryWhenLabel(item) {
   }
   if (item.daysLeft === 0) return "Use by today";
   if (item.daysLeft === 1) return "Use by tomorrow";
-  if (item.daysLeft != null && item.daysLeft <= 3) {
+  if (item.daysLeft != null && item.daysLeft <= 60) {
     return `Expires in ${item.daysLeft} days`;
   }
   const date = formatShortDate(item.expiryEstimate);
@@ -98,7 +112,7 @@ function quietDaysLabel(daysLeft) {
 
 function compactExpiryLabel(item) {
   if (!item) return "No expiry";
-  if (item.daysLeft != null && item.daysLeft > 3) {
+  if (item.daysLeft != null && item.daysLeft > 60) {
     return quietDaysLabel(item.daysLeft);
   }
   return expiryWhenLabel(item);
@@ -135,6 +149,8 @@ function dedupeByName(items) {
 
 export default function Pantry() {
   const { customer } = useCustomer();
+  const [searchParams] = useSearchParams();
+  const focus = searchParams.get("focus");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -164,6 +180,26 @@ export default function Pantry() {
 
     if (!stillExists) setDetailRow(null);
   }, [items, detailRow]);
+
+  useEffect(() => {
+    if (loading || !focus) return;
+    if (focus === "fresh") {
+      setExpandedGroups((current) => {
+        const next = { ...current };
+        for (const group of DISPLAY_GROUPS) next[group.id] = true;
+        return next;
+      });
+    }
+    const targetId =
+      focus === "fresh" ? "fr-fresh" : "fr-attention";
+    const timer = window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focus, loading, items.length]);
 
   async function setQuantity(item, nextQty) {
     if (!supabase) {
@@ -197,13 +233,16 @@ export default function Pantry() {
     setBusyId(null);
   }
 
-  const needsAttention = useMemo(
-    () =>
-      items
-        .filter((item) => item.expiringSoon || item.expired)
-        .sort((a, b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999)),
-    [items]
-  );
+  const needsAttention = useMemo(() => {
+    let list = items.filter((item) => item.expiringSoon || item.expired);
+    if (focus === "expired") list = list.filter((item) => item.expired);
+    if (focus === "soon") {
+      list = list.filter((item) => item.expiringSoon && !item.expired);
+    }
+    return [...list].sort(
+      (a, b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999)
+    );
+  }, [items, focus]);
 
   const compactGroups = useMemo(() => {
     const remaining = items.filter(
@@ -285,7 +324,25 @@ export default function Pantry() {
           <div className="glass fr-empty">Your fridge looks empty.</div>
         ) : (
           <>
-            <section className="fr-section fr-section-attention">
+            <ul className="fr-expiry-key" aria-label="Expiry key">
+              <li>
+                <span className="fr-key-swatch is-expired" aria-hidden="true" />
+                Expired
+              </li>
+              <li>
+                <span className="fr-key-swatch is-soon" aria-hidden="true" />
+                Expiring
+              </li>
+              <li>
+                <span className="fr-key-swatch is-fresh" aria-hidden="true" />
+                Fresh
+              </li>
+            </ul>
+
+            <section
+              id="fr-attention"
+              className={`fr-section fr-section-attention ${focus === "expired" || focus === "soon" ? "is-focused" : ""}`}
+            >
               <div className="fr-section-head">
                 <div>
                   <span className="fr-alert-icon" aria-hidden="true">
@@ -301,7 +358,7 @@ export default function Pantry() {
 
               {needsAttention.length === 0 ? (
                 <div className="glass fr-empty-soft">
-                  Nothing expiring in the next 3 days.
+                  Nothing expired or expiring within 60 days.
                 </div>
               ) : (
                 <div className="fr-priority-grid">
@@ -318,11 +375,15 @@ export default function Pantry() {
               )}
             </section>
 
+            <div id="fr-fresh">
             {compactGroups.map((group) => {
               const expanded = expandedGroups[group.id] ?? false;
 
               return (
-                <section key={group.id} className="fr-section">
+                <section
+                  key={group.id}
+                  className={`fr-section ${focus === "fresh" ? "is-focused" : ""}`}
+                >
                   <button
                     type="button"
                     className="fr-group-toggle"
@@ -357,6 +418,7 @@ export default function Pantry() {
                 </section>
               );
             })}
+            </div>
           </>
         )}
 
@@ -390,9 +452,10 @@ function CompactRow({ row, busy, onOpen, onRemove }) {
   const soonest = [...row.items].sort(
     (a, b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999)
   )[0];
+  const tone = expiryTone(soonest);
 
   return (
-    <div className="fr-compact-row">
+    <div className={`fr-compact-row is-${tone}`}>
       <button
         type="button"
         className="fr-compact-row-main"
@@ -407,7 +470,7 @@ function CompactRow({ row, busy, onOpen, onRemove }) {
         </span>
         <span className="fr-compact-meta">
           <span className="fr-compact-qty">Qty {row.totalQty}</span>
-          <span className="fr-compact-days">
+          <span className={`fr-compact-days is-${tone}`}>
             {compactExpiryLabel(soonest)}
           </span>
         </span>
@@ -472,9 +535,11 @@ function ItemDetailPanel({ row, items, busyId, onClose, onAdjust }) {
             const meta = pantryMetaLine(item);
 
             return (
-            <article key={item.id} className="fr-detail-item">
+            <article key={item.id} className={`fr-detail-item is-${expiryTone(item)}`}>
               <div className="fr-detail-item-top">
-                <span className="fr-expiry-when">{expiryWhenLabel(item)}</span>
+                <span className={`fr-expiry-when is-${expiryTone(item)}`}>
+                  {expiryWhenLabel(item)}
+                </span>
               </div>
               {meta && <p className="fr-meta fr-meta-inline">{meta}</p>}
 
@@ -524,21 +589,26 @@ function ItemDetailPanel({ row, items, busyId, onClose, onAdjust }) {
 
 function PantryCard({ item, priority = false, busy, onAdjust }) {
   const meta = pantryMetaLine(item);
+  const tone = expiryTone(item);
 
   return (
-    <article className={`glass fr-card ${priority ? "is-priority is-compact" : ""}`}>
+    <article
+      className={`glass fr-card is-${tone} ${priority ? "is-priority is-compact" : ""}`}
+    >
       {priority && (
         <div className="fr-card-top">
-          <span
-            className={`fr-urgent ${item.expired ? "is-past" : "is-soon"}`}
-          >
-            {item.expired ? "Past expiry" : "Expiring soon"}
+          <span className={`fr-urgent is-${tone}`}>
+            {tone === "expired"
+              ? "Past expiry"
+              : tone === "soon"
+                ? "Going off soon"
+                : "Fresh"}
           </span>
         </div>
       )}
 
       <h3>{item.name}</h3>
-      <p className="fr-expiry-when">{expiryWhenLabel(item)}</p>
+      <p className={`fr-expiry-when is-${tone}`}>{expiryWhenLabel(item)}</p>
       {meta && <p className="fr-meta fr-meta-inline">{meta}</p>}
 
       <div className="fr-card-actions fr-card-actions-tight">

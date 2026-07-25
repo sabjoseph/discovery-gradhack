@@ -41,8 +41,10 @@ router.get("/:customerId", async (req, res) => {
         addedDate: row.added_date,
         expiryEstimate: row.expiry_estimate,
         daysLeft,
-        expiringSoon: daysLeft !== null && daysLeft >= 0 && daysLeft <= 3,
+        expiringSoon: daysLeft !== null && daysLeft >= 0 && daysLeft <= 60,
         expired: daysLeft !== null && daysLeft < 0,
+        fresh:
+          daysLeft === null || daysLeft > 60,
         category: row.products?.categories?.subcategory || "Uncategorised",
         mainCategory: row.products?.categories?.main_category || null,
         categoryId: row.products?.category_id || row.products?.categories?.id,
@@ -57,6 +59,8 @@ router.get("/:customerId", async (req, res) => {
         count: items.length,
         expiringSoonCount: items.filter((i) => i.expiringSoon && !i.expired)
           .length,
+        expiredCount: items.filter((i) => i.expired).length,
+        freshCount: items.filter((i) => i.fresh).length,
       },
     });
   } catch (err) {

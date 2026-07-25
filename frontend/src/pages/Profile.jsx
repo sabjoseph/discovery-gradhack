@@ -181,7 +181,10 @@ export default function Profile() {
     ? searchParams.get("tab")
     : "account";
   const [tab, setTab] = useState(initialTab);
-  const [accountPanel, setAccountPanel] = useState("basics");
+  const [accountPanel, setAccountPanel] = useState(() => {
+    const panel = searchParams.get("panel");
+    return ACCOUNT_PANELS.some((p) => p.id === panel) ? panel : "basics";
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -208,6 +211,10 @@ export default function Profile() {
     const next = searchParams.get("tab");
     if (SETTINGS_TABS.some((t) => t.id === next) && next !== tab) {
       setTab(next);
+    }
+    const panel = searchParams.get("panel");
+    if (ACCOUNT_PANELS.some((p) => p.id === panel) && panel !== accountPanel) {
+      setAccountPanel(panel);
     }
   }, [searchParams]);
 

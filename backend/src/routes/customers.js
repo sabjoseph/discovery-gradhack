@@ -44,6 +44,13 @@ router.post("/", async (req, res) => {
       });
     }
 
+    if (!/\p{L}/u.test(firstName) || !/\p{L}/u.test(surname)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid first name and surname",
+      });
+    }
+
     if (firstName.length > 60 || surname.length > 60) {
       return res.status(400).json({
         success: false,

@@ -89,12 +89,12 @@ export default function AppLayout() {
       <header className="topbar">
         <div className="container topbar-inner">
           <NavLink to="/app" className="brand">
-            <img src="/BiteBetter Logo.png" alt="BiteBetter" />
+            <img src="/bitebetter-logo-nav.png" alt="BiteBetter" />
             <div className="brand-text">
               <strong>
                 Bite<span>Better</span>
               </strong>
-              <small>Smart choices</small>
+              <small>Be better</small>
             </div>
           </NavLink>
 
