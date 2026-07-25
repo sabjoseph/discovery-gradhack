@@ -107,21 +107,13 @@ export default function NamePicker() {
     <div className="np-page">
       <div className="np-main">
         <section className="np-brand">
-          <div className="np-logo-badge">
-            <img src="/BiteBetter Logo.png" alt="BiteBetter" />
-            <span>
-              Bite<span>Better</span>
-            </span>
-          </div>
-
-          <h1 className="np-title">BiteBetter</h1>
-          <p className="np-lead">
+          {/*<h1 className="np-title">BiteBetter</h1>         <p className="np-lead">
             Welcome back to your journey of fresh vitality. Find your name to
             track your progress, manage your pantry, and discover your next
             favorite healthy meal.
-          </p>
+          </p> */}
 
-          <ul className="np-features">
+          {/*<ul className="np-features">
             <li>
               <span className="np-feature-icon" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -158,13 +150,20 @@ export default function NamePicker() {
               </span>
               Intelligent Pantry Management
             </li>
-          </ul>
-        </section>
+          </ul>*/}
+        </section> 
 
         <section className="np-card">
           <header className="np-card-header">
-            <h2>Welcome Back</h2>
-            <p>Search your name to access your dashboard</p>
+            <div className="np-card-brand">
+              <div className="np-logo-badge">
+                <img src="/BiteBetter Logo.png" alt="BiteBetter" />
+              </div>
+              <div>
+                <h2>Welcome Back to BiteBetter</h2>
+                <p>Search your name to access your dashboard</p>
+              </div>
+            </div>
           </header>
 
           <label className="np-field">
@@ -225,7 +224,6 @@ export default function NamePicker() {
                     </span>
                     <span className="np-result-meta">
                       <strong>{person.name}</strong>
-                      <small>{person.id}</small>
                     </span>
                     {active && (
                       <span className="np-check" aria-hidden="true">
@@ -246,20 +244,21 @@ export default function NamePicker() {
             Continue
             <span aria-hidden="true">→</span>
           </button>
-
-          <p className="np-hint">
-            No password needed — pick your name from the{" "}
-            <strong>80 HealthyFood customers</strong> already in the system.
-          </p>
         </section>
       </div>
+
+      <img
+        className="np-mascot"
+        src="/leaf-mascot.png"
+        alt="BiteBetter mascot"
+      />
 
       <footer className="np-footer">
         <div className="np-footer-left">
           <strong>
             Bite<span>Better</span>
           </strong>
-          <span>© {new Date().getFullYear()} BiteBetter. Bite better, be better.</span>
+          <span>© {new Date().getFullYear()} Bite better, be better.</span>
         </div>
         <div className="np-footer-links">
           <span>Privacy Policy</span>
