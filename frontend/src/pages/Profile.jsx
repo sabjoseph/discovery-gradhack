@@ -191,6 +191,9 @@ export default function Profile() {
   const [budgetError, setBudgetError] = useState("");
   const [saved, setSaved] = useState(false);
   const [baseline, setBaseline] = useState(null);
+  const [estimates, setEstimates] = useState(null);
+  const [budgetConfirmed, setBudgetConfirmed] = useState(false);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
   const [vouchers, setVouchers] = useState([]);
   const [form, setForm] = useState({
     budget_monthly: "",
@@ -230,12 +233,22 @@ export default function Profile() {
       .getProfile(customer.id)
       .then((profileRes) => {
         if (!alive) return;
+        const profile = res.data.profile || {};
+        const notifications = res.data.notifications || {};
+        // Present only for customers with no saved profile row yet.
+        const inferred = res.data.estimates || null;
+        const estimatedBudget =
+          profile.budget_monthly == null && inferred?.budget_monthly != null
+            ? String(inferred.budget_monthly)
+            : null;
         const profile = profileRes.data.profile || {};
         const notifications = profileRes.data.notifications || {};
         const avatarUrl = profile.avatar_url || null;
         const next = {
           budget_monthly:
-            profile.budget_monthly == null ? "" : String(profile.budget_monthly),
+            profile.budget_monthly != null
+              ? String(profile.budget_monthly)
+              : estimatedBudget || "",
           age: profile.age == null ? "" : String(profile.age),
           weight_kg: profile.weight_kg == null ? "" : String(profile.weight_kg),
           height_cm: profile.height_cm == null ? "" : String(profile.height_cm),
@@ -251,6 +264,8 @@ export default function Profile() {
         };
         setForm(next);
         setBaseline(next);
+        setEstimates(inferred);
+        setBudgetConfirmed(inferred == null);
         setVouchers(Array.isArray(profile.vouchers) ? profile.vouchers : []);
         if (avatarUrl !== customer.avatarUrl) {
           setCustomer({ ...customer, avatarUrl });
@@ -291,6 +306,23 @@ export default function Profile() {
 
   const activeAccountPanel =
     ACCOUNT_PANELS.find((p) => p.id === accountPanel) || ACCOUNT_PANELS[0];
+
+  // The estimate label survives only until the customer edits the field or saves it.
+  const budgetIsEstimated =
+    !budgetConfirmed &&
+    estimates?.budget_monthly != null &&
+    form.budget_monthly === String(estimates.budget_monthly);
+
+  const openSuggestions = useMemo(() => {
+    const list = estimates?.categorySuggestions || [];
+    return list.filter((name) => !form.dietary_preferences.includes(name));
+  }, [estimates, form.dietary_preferences]);
+
+  const visibleSuggestions = showAllSuggestions
+    ? openSuggestions
+    : openSuggestions.slice(0, 6);
+  const hiddenSuggestionCount = openSuggestions.length - visibleSuggestions.length;
+  const healthMix = estimates?.healthMix || null;
 
   function updateField(key, value) {
     setSaved(false);
@@ -396,6 +428,8 @@ export default function Profile() {
           form.weight_kg === "" ? "" : String(Number(form.weight_kg)),
         height_cm:
           form.height_cm === "" ? "" : String(Number(form.height_cm)),
+      });
+      setBudgetConfirmed(true);
         avatar_url: savedAvatar,
       };
       setBaseline(nextForm);
@@ -566,8 +600,17 @@ export default function Profile() {
                 <section className="pf-section">
                   <h3>Monthly budget</h3>
                   <label className="pf-budget">
-                    <span>Food budget (ZAR)</span>
-                    <div className="pf-budget-input">
+                    <span>
+                      Food budget (ZAR)
+                      {budgetIsEstimated && (
+                        <span className="pf-estimate-tag">Estimated</span>
+                      )}
+                    </span>
+                    <div
+                      className={`pf-budget-input${
+                        budgetIsEstimated ? " is-estimated" : ""
+                      }`}
+                    >
                       <span>R</span>
                       <input
                         type="number"
@@ -588,6 +631,13 @@ export default function Profile() {
                   </label>
                   {budgetError ? (
                     <p className="pf-field-error">{budgetError}</p>
+                  ) : budgetIsEstimated ? (
+                    <p className="pf-hint pf-estimate-hint">
+                      Estimated from your last {estimates.monthsOfHistory}{" "}
+                      {estimates.monthsOfHistory === 1 ? "month" : "months"} of
+                      shopping ({formatCurrency(estimates.budget_monthly)} a
+                      month on average). Edit it or save to confirm.
+                    </p>
                   ) : form.budget_monthly !== "" &&
                     !Number.isNaN(Number(form.budget_monthly)) ? (
                     <p className="pf-hint">
@@ -689,10 +739,49 @@ export default function Profile() {
                     onToggle={(v) => toggleList("dietary_preferences", v)}
                     onRemove={(v) => removeFromList("dietary_preferences", v)}
                   />
+
+                  {openSuggestions.length > 0 && (
+                    <div className="pf-suggest">
+                      <p className="pf-suggest-head">
+                        You've never bought from these categories in{" "}
+                        {estimates.basketCount} shops — add as a preference?
+                      </p>
+                      <div className="pf-chips">
+                        {visibleSuggestions.map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            className="pf-chip pf-chip-suggest"
+                            onClick={() => addToList("dietary_preferences", name)}
+                          >
+                            {name}
+                            <span aria-hidden="true">add?</span>
+                          </button>
+                        ))}
+                        {hiddenSuggestionCount > 0 && (
+                          <button
+                            type="button"
+                            className="pf-chip pf-chip-more"
+                            onClick={() => setShowAllSuggestions(true)}
+                          >
+                            +{hiddenSuggestionCount} more
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 <section className="pf-section">
                   <h3>Health goals</h3>
+                  {healthMix && (
+                    <p className="pf-mix">
+                      Your recent shopping is <strong>{healthMix.healthy}%
+                      Healthy</strong>, {healthMix.neutral}% Neutral,{" "}
+                      {healthMix.unhealthy}% Unhealthy — context for picking a
+                      goal below.
+                    </p>
+                  )}
                   <ChipField
                     label="What you're working toward"
                     values={form.health_goals}
