@@ -1,10 +1,37 @@
 const express = require("express");
 const supabase = require("../config/supabase");
+const { extractVouchers, withVouchers } = require("../utils/vouchers");
 
 const router = express.Router();
 
-// Body metrics are stored as a reserved object inside health_goals jsonb
-// so we don't need a schema migration: { __metrics: true, age, weight_kg, height_cm }
+const MAX_AVATAR_CHARS = 350_000; // ~resized jpeg data URL
+
+// Body metrics + vouchers + avatar are stored as reserved objects inside health_goals jsonb
+// so we don't need a schema migration:
+//   { __metrics: true, age, weight_kg, height_cm }
+//   { __vouchers: true, items: [...] }
+//   { __avatar: true, dataUrl }
+function extractAvatar(healthGoals) {
+  const list = Array.isArray(healthGoals) ? healthGoals : [];
+  const entry = list.find(
+    (item) => item && typeof item === "object" && item.__avatar
+  );
+  const dataUrl = typeof entry?.dataUrl === "string" ? entry.dataUrl : null;
+  if (!dataUrl || !dataUrl.startsWith("data:image/")) return null;
+  return dataUrl;
+}
+
+function withAvatar(healthGoals, dataUrl) {
+  const list = Array.isArray(healthGoals) ? [...healthGoals] : [];
+  const filtered = list.filter(
+    (item) => !(item && typeof item === "object" && item.__avatar)
+  );
+  if (dataUrl) {
+    filtered.push({ __avatar: true, dataUrl });
+  }
+  return filtered;
+}
+
 function splitHealthGoals(raw) {
   const list = Array.isArray(raw) ? raw : [];
   const metricsEntry = list.find(
@@ -16,11 +43,13 @@ function splitHealthGoals(raw) {
     age: metricsEntry?.age ?? null,
     weight_kg: metricsEntry?.weight_kg ?? null,
     height_cm: metricsEntry?.height_cm ?? null,
+    vouchers: extractVouchers(list),
+    avatar_url: extractAvatar(list),
   };
 }
 
-function mergeHealthGoals(goals, { age, weight_kg, height_cm }) {
-  const list = Array.isArray(goals)
+function mergeHealthGoals(goals, { age, weight_kg, height_cm, vouchers, avatar_url }) {
+  let list = Array.isArray(goals)
     ? goals.filter((item) => typeof item === "string")
     : [];
   const hasMetrics =
@@ -34,6 +63,12 @@ function mergeHealthGoals(goals, { age, weight_kg, height_cm }) {
       height_cm:
         height_cm == null || height_cm === "" ? null : Number(height_cm),
     });
+  }
+  if (Array.isArray(vouchers) && vouchers.length) {
+    list = withVouchers(list, vouchers);
+  }
+  if (avatar_url) {
+    list = withAvatar(list, avatar_url);
   }
   return list;
 }
@@ -104,6 +139,8 @@ router.get("/:customerId", async (req, res) => {
           weight_kg: weight,
           height_cm: height,
           bmi: calcBmi(weight, height),
+          vouchers: split.vouchers,
+          avatar_url: split.avatar_url,
           updated_at: profile?.updated_at ?? null,
         },
         notifications: notifications || {
@@ -129,6 +166,7 @@ router.put("/:customerId", async (req, res) => {
       height_cm,
       milestone_alerts,
       recommendation_nudges,
+      avatar_url,
     } = req.body || {};
 
     let budgetValue = null;
@@ -171,6 +209,34 @@ router.put("/:customerId", async (req, res) => {
       return res.status(400).json({ success: false, message: heightParsed.error });
     }
 
+    // Preserve existing vouchers; avatar comes from the request when provided.
+    const { data: existingProfile } = await supabase
+      .from("user_profiles")
+      .select("health_goals")
+      .eq("id", customerId)
+      .maybeSingle();
+    const existingVouchers = extractVouchers(existingProfile?.health_goals);
+    const existingAvatar = extractAvatar(existingProfile?.health_goals);
+
+    let nextAvatar = existingAvatar;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "avatar_url")) {
+      if (avatar_url === null || avatar_url === "") {
+        nextAvatar = null;
+      } else if (typeof avatar_url !== "string" || !avatar_url.startsWith("data:image/")) {
+        return res.status(400).json({
+          success: false,
+          message: "Avatar must be an image data URL",
+        });
+      } else if (avatar_url.length > MAX_AVATAR_CHARS) {
+        return res.status(400).json({
+          success: false,
+          message: "Avatar image is too large — try a smaller photo",
+        });
+      } else {
+        nextAvatar = avatar_url;
+      }
+    }
+
     const profilePayload = {
       id: customerId,
       budget_monthly: budgetValue,
@@ -181,6 +247,8 @@ router.put("/:customerId", async (req, res) => {
         age: ageParsed.value,
         weight_kg: weightParsed.value,
         height_cm: heightParsed.value,
+        vouchers: existingVouchers,
+        avatar_url: nextAvatar,
       }),
       updated_at: new Date().toISOString(),
     };
@@ -238,6 +306,8 @@ router.put("/:customerId", async (req, res) => {
           weight_kg: split.weight_kg,
           height_cm: split.height_cm,
           bmi: calcBmi(split.weight_kg, split.height_cm),
+          vouchers: split.vouchers,
+          avatar_url: split.avatar_url,
         },
         notifications,
       },

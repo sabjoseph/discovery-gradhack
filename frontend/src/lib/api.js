@@ -30,6 +30,8 @@ export const api = {
   getPurchases: (customerId, params) =>
     get(`/api/purchases/${customerId}`, params),
   getPurchasesMeta: (customerId) => get(`/api/purchases/${customerId}/meta`),
+  getPurchasesSummary: (customerId) =>
+    get(`/api/purchases/${customerId}/summary`),
   getPurchaseBasket: (customerId, basketId) =>
     get(`/api/purchases/${customerId}/${basketId}`),
   getPantry: (customerId) => get(`/api/pantry/${customerId}`),
@@ -46,6 +48,9 @@ export const api = {
       action,
     }),
   getMilestones: (customerId) => get(`/api/milestones/${customerId}`),
+  getRewards: (customerId) => get(`/api/rewards/${customerId}`),
+  redeemReward: (customerId, rewardId) =>
+    post(`/api/rewards/${customerId}/redeem`, { rewardId }),
   getProfile: (customerId) => get(`/api/profile/${customerId}`),
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),
   getAnalytics: (customerId, days = 90) =>

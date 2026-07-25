@@ -152,6 +152,19 @@ img {
   border: 1px solid var(--border);
 }
 
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:disabled:hover,
+.btn[disabled]:hover {
+  transform: none;
+}
+
 .btn-danger {
   background: #fdecec;
   color: var(--danger);
@@ -395,6 +408,19 @@ img {
   place-items: center;
   font-weight: 700;
   font-size: 0.85rem;
+  overflow: hidden;
+}
+
+.avatar.has-photo {
+  background: transparent;
+  padding: 0;
+}
+
+.avatar.has-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .avatar-sm {
@@ -407,8 +433,10 @@ img {
 .avatar-btn {
   border: none;
   padding: 0;
+  background: transparent;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 50%;
 }
 
 .avatar-btn:hover,
