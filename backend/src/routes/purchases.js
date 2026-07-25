@@ -1,8 +1,15 @@
 const express = require("express");
 const supabase = require("../config/supabase");
-const { classifyFromLabel } = require("../utils/health");
+const { classifyFromLabel, getDatasetEndDate } = require("../utils/health");
 
 const router = express.Router();
+
+function retailerBucket(name) {
+  const label = (name || "").toLowerCase();
+  if (label.includes("checker")) return "checkers";
+  if (label.includes("woolworth") || label.includes("woolies")) return "woolies";
+  return "other";
+}
 
 function mapItem(item) {
   const cat = item.products?.categories;
@@ -52,6 +59,87 @@ router.get("/:customerId/meta", async (req, res) => {
         minDate,
         maxDate,
         basketCount: dates?.length || 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/:customerId/summary", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const datasetEnd = await getDatasetEndDate();
+    const monthStart = new Date(datasetEnd);
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const [{ data: profile }, { data: monthBaskets, error: monthError }] =
+      await Promise.all([
+        supabase
+          .from("user_profiles")
+          .select("budget_monthly")
+          .eq("id", customerId)
+          .maybeSingle(),
+        supabase
+          .from("baskets")
+          .select(
+            `
+            purchase_date,
+            retailers ( name ),
+            basket_items ( line_total )
+          `
+          )
+          .eq("customer_id", customerId)
+          .gte("purchase_date", monthStart.toISOString()),
+      ]);
+
+    if (monthError) throw monthError;
+
+    let monthSpend = 0;
+    let checkersSpend = 0;
+    let wooliesSpend = 0;
+    let otherSpend = 0;
+    let basketCount = 0;
+
+    for (const basket of monthBaskets || []) {
+      basketCount += 1;
+      let basketTotal = 0;
+      for (const item of basket.basket_items || []) {
+        basketTotal += Number(item.line_total || 0);
+      }
+      monthSpend += basketTotal;
+      const bucket = retailerBucket(basket.retailers?.name);
+      if (bucket === "checkers") checkersSpend += basketTotal;
+      else if (bucket === "woolies") wooliesSpend += basketTotal;
+      else otherSpend += basketTotal;
+    }
+
+    const budgetMonthly =
+      profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
+    const hasBudget = budgetMonthly != null && !Number.isNaN(budgetMonthly);
+    const remaining = hasBudget ? budgetMonthly - monthSpend : null;
+    const usedPct =
+      hasBudget && budgetMonthly > 0
+        ? Math.min(100, Math.round((monthSpend / budgetMonthly) * 100))
+        : 0;
+
+    res.json({
+      success: true,
+      data: {
+        monthLabel: monthStart.toLocaleString("en-ZA", {
+          month: "long",
+          year: "numeric",
+        }),
+        datasetEnd: datasetEnd.toISOString(),
+        budgetMonthly: hasBudget ? budgetMonthly : null,
+        monthSpend,
+        checkersSpend,
+        wooliesSpend,
+        otherSpend,
+        remaining,
+        usedPct,
+        basketCount,
       },
     });
   } catch (err) {

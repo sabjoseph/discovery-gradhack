@@ -30,6 +30,8 @@ export const api = {
   getPurchases: (customerId, params) =>
     get(`/api/purchases/${customerId}`, params),
   getPurchasesMeta: (customerId) => get(`/api/purchases/${customerId}/meta`),
+  getPurchasesSummary: (customerId) =>
+    get(`/api/purchases/${customerId}/summary`),
   getPurchaseBasket: (customerId, basketId) =>
     get(`/api/purchases/${customerId}/${basketId}`),
   getPantry: (customerId) => get(`/api/pantry/${customerId}`),
