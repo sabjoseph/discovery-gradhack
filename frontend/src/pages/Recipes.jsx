@@ -257,115 +257,6 @@ export default function Recipes() {
         </div>
       </header>
 
-      <section id="for-you" className="rp-foryou panel">
-        <div className="rp-foryou-head">
-          <div>
-            <p className="rp-foryou-kicker">For you</p>
-            <h2>Recommendations</h2>
-            <p>
-              Suggestions matched to your pantry. Accept one to add it to your
-              meal plan.
-            </p>
-          </div>
-          {budget && (
-            <div className="rp-budget">
-              <span>Left of your monthly budget</span>
-              <strong className={budget.remaining < 0 ? "is-over" : ""}>
-                {formatCurrency(budget.remaining)}
-              </strong>
-              <small>
-                {formatCurrency(budget.monthSpend)} spent of{" "}
-                {formatCurrency(budget.budgetMonthly)} — pricier picks are filtered
-                out
-              </small>
-            </div>
-          )}
-        </div>
-
-        {recsError && <div className="error-state rp-foryou-error">{recsError}</div>}
-
-        {recsLoading ? (
-          <LoadingBlock label="Finding what fits you…" />
-        ) : recs.length === 0 ? (
-          <div className="rp-foryou-empty">
-            No recommendations right now — check back after your next shop.
-          </div>
-        ) : (
-          <div className="rp-foryou-feed">
-            {recs.map((item) => {
-              const accepted = acceptedIds.has(item.id);
-              return (
-                <article
-                  key={item.id}
-                  className={`rp-foryou-card ${accepted ? "is-accepted" : ""}`}
-                >
-                  <div className="rp-foryou-card-main">
-                    <div className="rp-foryou-tags">
-                      <span className="rp-foryou-type">{item.type}</span>
-                      {item.matchPercent != null && (
-                        <span className="rp-foryou-match-pill">
-                          {item.matchPercent}% pantry match
-                        </span>
-                      )}
-                    </div>
-                    <h3>
-                      {item.recipe?.name || item.product?.name || "Suggestion"}
-                    </h3>
-                    <p className="rp-foryou-reason">{item.reason}</p>
-                    <p className="rp-foryou-meta">
-                      {item.recipe?.prep_time_minutes != null &&
-                        `${item.recipe.prep_time_minutes} min · serves ${item.recipe.servings}`}
-                      {item.estimatedMissingCost != null &&
-                        ` · ~${formatCurrency(item.estimatedMissingCost)} to complete`}
-                    </p>
-                    {item.matchPercent != null && (
-                      <div className="rp-match">
-                        <div style={{ width: `${item.matchPercent}%` }} />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rp-foryou-actions">
-                    {item.recipe?.id && (
-                      <Link
-                        to={`/app/recipes/${item.recipe.id}`}
-                        className="btn btn-sm btn-outline"
-                      >
-                        View recipe
-                      </Link>
-                    )}
-                    {accepted ? (
-                      <span className="rp-foryou-accepted">
-                        Added to {acceptedSlots[item.id] || "your plan"} ✓
-                      </span>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-primary"
-                          disabled={busyId === item.id}
-                          onClick={() => handleRecAction(item, "accepted")}
-                        >
-                          Accept
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-secondary"
-                          disabled={busyId === item.id}
-                          onClick={() => handleRecAction(item, "dismissed")}
-                        >
-                          Dismiss
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
       <section className="rp-planner panel">
         <div className="rp-planner-top">
           <h2>Weekly meal planner</h2>
@@ -479,6 +370,115 @@ export default function Recipes() {
             >
               Cancel
             </button>
+          </div>
+        )}
+      </section>
+
+      <section id="for-you" className="rp-foryou panel">
+        <div className="rp-foryou-head">
+          <div>
+            <p className="rp-foryou-kicker">For you</p>
+            <h2>Recommendations</h2>
+            <p>
+              Suggestions matched to your pantry. Accept one to add it to your
+              meal plan.
+            </p>
+          </div>
+          {budget && (
+            <div className="rp-budget">
+              <span>Left of your monthly budget</span>
+              <strong className={budget.remaining < 0 ? "is-over" : ""}>
+                {formatCurrency(budget.remaining)}
+              </strong>
+              <small>
+                {formatCurrency(budget.monthSpend)} spent of{" "}
+                {formatCurrency(budget.budgetMonthly)} — pricier picks are filtered
+                out
+              </small>
+            </div>
+          )}
+        </div>
+
+        {recsError && <div className="error-state rp-foryou-error">{recsError}</div>}
+
+        {recsLoading ? (
+          <LoadingBlock label="Finding what fits you…" />
+        ) : recs.length === 0 ? (
+          <div className="rp-foryou-empty">
+            No recommendations right now — check back after your next shop.
+          </div>
+        ) : (
+          <div className="rp-foryou-feed">
+            {recs.map((item) => {
+              const accepted = acceptedIds.has(item.id);
+              return (
+                <article
+                  key={item.id}
+                  className={`rp-foryou-card ${accepted ? "is-accepted" : ""}`}
+                >
+                  <div className="rp-foryou-card-main">
+                    <div className="rp-foryou-tags">
+                      <span className="rp-foryou-type">{item.type}</span>
+                      {item.matchPercent != null && (
+                        <span className="rp-foryou-match-pill">
+                          {item.matchPercent}% pantry match
+                        </span>
+                      )}
+                    </div>
+                    <h3>
+                      {item.recipe?.name || item.product?.name || "Suggestion"}
+                    </h3>
+                    <p className="rp-foryou-reason">{item.reason}</p>
+                    <p className="rp-foryou-meta">
+                      {item.recipe?.prep_time_minutes != null &&
+                        `${item.recipe.prep_time_minutes} min · serves ${item.recipe.servings}`}
+                      {item.estimatedMissingCost != null &&
+                        ` · ~${formatCurrency(item.estimatedMissingCost)} to complete`}
+                    </p>
+                    {item.matchPercent != null && (
+                      <div className="rp-match">
+                        <div style={{ width: `${item.matchPercent}%` }} />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rp-foryou-actions">
+                    {item.recipe?.id && (
+                      <Link
+                        to={`/app/recipes/${item.recipe.id}`}
+                        className="btn btn-sm btn-outline"
+                      >
+                        View recipe
+                      </Link>
+                    )}
+                    {accepted ? (
+                      <span className="rp-foryou-accepted">
+                        Added to {acceptedSlots[item.id] || "your plan"} ✓
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          disabled={busyId === item.id}
+                          onClick={() => handleRecAction(item, "accepted")}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          disabled={busyId === item.id}
+                          onClick={() => handleRecAction(item, "dismissed")}
+                        >
+                          Dismiss
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
