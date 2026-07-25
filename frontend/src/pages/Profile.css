@@ -361,11 +361,71 @@
   padding-left: 0;
 }
 
+.pf-budget-input.is-estimated {
+  background: #fdf6e3;
+  border-color: rgba(212, 160, 23, 0.45);
+}
+
+.pf-estimate-tag {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #fdf1d4;
+  color: #8a6210;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
 .pf-hint {
   margin-top: 0.45rem;
   color: var(--text-muted);
   font-size: 0.85rem;
   line-height: 1.4;
+}
+
+.pf-estimate-hint {
+  color: #8a6210;
+}
+
+.pf-suggest {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.pf-suggest-head {
+  margin-bottom: 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.pf-chip-suggest {
+  border-style: dashed;
+}
+
+.pf-chip-suggest span {
+  color: var(--primary-deep);
+  font-weight: 800;
+}
+
+.pf-mix {
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  background: #f1f7ec;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.pf-mix strong {
+  color: var(--primary-deep);
 }
 
 .pf-chip-empty {
