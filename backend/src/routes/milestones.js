@@ -5,6 +5,12 @@ const {
   daysAgo,
   getDatasetEndDate,
 } = require("../utils/health");
+const {
+  REWARD_CATALOG,
+  extractVouchers,
+  withVouchers,
+  buildVoucherFromReward,
+} = require("../utils/vouchers");
 
 const router = express.Router();
 
@@ -23,6 +29,13 @@ const DEFAULT_MILESTONES = [
       "Accept 3 recipe recommendations — cook something new from your pantry matches.",
     criteria: { recipes_tried: 3 },
     reward_value: 30,
+  },
+  {
+    name: "The Cookery",
+    description:
+      "Buy 10 healthy foods this month (tagged on Purchases) and unlock The Cookery voucher.",
+    criteria: { healthy_foods: 10 },
+    reward_value: 0,
   },
   {
     name: "Log in 5 days in a row",
@@ -57,20 +70,134 @@ async function ensureMilestones() {
     !existing?.length ||
     existing.some((row) => row.criteria && "type" in row.criteria);
 
-  if (!needsReseed) return existing;
+  if (needsReseed) {
+    if (existing?.length) {
+      await supabase.from("customer_milestones").delete().neq("id", 0);
+      await supabase.from("milestones").delete().neq("id", 0);
+    }
 
-  if (existing?.length) {
-    await supabase.from("customer_milestones").delete().neq("id", 0);
-    await supabase.from("milestones").delete().neq("id", 0);
+    const { data: inserted, error: insertError } = await supabase
+      .from("milestones")
+      .insert(DEFAULT_MILESTONES)
+      .select();
+
+    if (insertError) throw insertError;
+    return inserted;
   }
 
-  const { data: inserted, error: insertError } = await supabase
-    .from("milestones")
-    .insert(DEFAULT_MILESTONES)
-    .select();
+  // Migrate The Cookery from meals_cooked → healthy_foods before inserting missing.
+  const cookeryDefault = DEFAULT_MILESTONES.find(
+    (m) => criteriaKey(m.criteria) === "healthy_foods"
+  );
+  let working = existing || [];
+  const legacyCookery = working.find(
+    (m) => criteriaKey(m.criteria) === "meals_cooked"
+  );
+  if (legacyCookery && cookeryDefault) {
+    const { error: updateError } = await supabase
+      .from("milestones")
+      .update({
+        name: cookeryDefault.name,
+        description: cookeryDefault.description,
+        criteria: cookeryDefault.criteria,
+        reward_value: cookeryDefault.reward_value,
+      })
+      .eq("id", legacyCookery.id);
+    if (updateError) throw updateError;
+    legacyCookery.name = cookeryDefault.name;
+    legacyCookery.description = cookeryDefault.description;
+    legacyCookery.criteria = cookeryDefault.criteria;
+    legacyCookery.reward_value = cookeryDefault.reward_value;
+  }
 
-  if (insertError) throw insertError;
-  return inserted;
+  // Add any new default milestones that aren't in the DB yet (by criteria key).
+  const existingKeys = new Set(
+    working.map((row) => criteriaKey(row.criteria)).filter(Boolean)
+  );
+  const missing = DEFAULT_MILESTONES.filter(
+    (m) => !existingKeys.has(criteriaKey(m.criteria))
+  );
+
+  if (missing.length) {
+    const { data: added, error: addError } = await supabase
+      .from("milestones")
+      .insert(missing)
+      .select();
+
+    if (addError) throw addError;
+    working = [...working, ...(added || [])];
+  }
+
+  // Keep The Cookery copy in sync if it already uses healthy_foods.
+  const cookery = working.find(
+    (m) => criteriaKey(m.criteria) === "healthy_foods"
+  );
+  if (
+    cookery &&
+    cookeryDefault &&
+    (cookery.name !== cookeryDefault.name ||
+      cookery.description !== cookeryDefault.description)
+  ) {
+    const { error: updateError } = await supabase
+      .from("milestones")
+      .update({
+        name: cookeryDefault.name,
+        description: cookeryDefault.description,
+      })
+      .eq("id", cookery.id);
+    if (updateError) throw updateError;
+    cookery.name = cookeryDefault.name;
+    cookery.description = cookeryDefault.description;
+  }
+
+  return working;
+}
+
+async function grantBonusVoucher(customerId, criteriaKeyName) {
+  const bonus =
+    REWARD_CATALOG.find((r) => r.unlockCriteria === criteriaKeyName) || null;
+  if (!bonus) return null;
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("health_goals")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  const healthGoals = profile?.health_goals ?? [];
+  const vouchers = extractVouchers(healthGoals);
+  if (vouchers.some((v) => v.rewardId === bonus.id)) return null;
+
+  const voucher = buildVoucherFromReward(bonus);
+  const nextGoals = withVouchers(healthGoals, [voucher, ...vouchers]);
+  const updatedAt = new Date().toISOString();
+
+  if (profile) {
+    await supabase
+      .from("user_profiles")
+      .update({ health_goals: nextGoals, updated_at: updatedAt })
+      .eq("id", customerId);
+  } else {
+    await supabase.from("user_profiles").insert({
+      id: customerId,
+      health_goals: nextGoals,
+      updated_at: updatedAt,
+    });
+  }
+
+  await supabase.from("activity_log").insert({
+    customer_id: customerId,
+    event_type: "voucher_redeemed",
+    metadata: {
+      rewardId: bonus.id,
+      voucherId: voucher.id,
+      code: voucher.code,
+      points: 0,
+      source: "milestone_bonus",
+    },
+  });
+
+  return voucher;
 }
 
 function itemHealth(item) {
@@ -159,6 +286,7 @@ router.get("/:customerId", async (req, res) => {
           purchase_date,
           basket_items (
             line_total,
+            quantity,
             products (
               categories (
                 main_category,
@@ -190,13 +318,17 @@ router.get("/:customerId", async (req, res) => {
     let healthySpend = 0;
     let totalSpend = 0;
     let healthyBaskets = 0;
+    let healthyFoods = 0;
 
     for (const basket of baskets || []) {
       if (isHealthyBasket(basket)) healthyBaskets += 1;
       for (const item of basket.basket_items || []) {
         const amount = Number(item.line_total || 0);
         totalSpend += amount;
-        if (itemHealth(item) === "healthy") healthySpend += amount;
+        if (itemHealth(item) === "healthy") {
+          healthySpend += amount;
+          healthyFoods += Math.max(1, Number(item.quantity) || 1);
+        }
       }
     }
 
@@ -221,6 +353,7 @@ router.get("/:customerId", async (req, res) => {
     const metrics = {
       healthy_baskets: healthyBaskets,
       recipes_tried: recipesTried,
+      healthy_foods: healthyFoods,
       login_streak: loginStreak,
       pantry_items: pantryItems,
       healthy_spend_pct: healthySpendPct,
@@ -239,14 +372,18 @@ router.get("/:customerId", async (req, res) => {
       const existing = achievedMap.get(m.id);
 
       if (met && !existing) {
-        newlyAchieved.push(m.id);
+        newlyAchieved.push({ id: m.id, criteriaKey: key });
       }
+
+      const isCookeryUnlock =
+        Number(m.reward_value || 0) === 0 && key === "healthy_foods";
 
       return {
         id: m.id,
         name: m.name,
         description: m.description,
         rewardValue: m.reward_value,
+        rewardLabel: isCookeryUnlock ? "Cookery unlock" : null,
         criteriaKey: key,
         current: Math.min(current, target),
         currentRaw: current,
@@ -259,9 +396,9 @@ router.get("/:customerId", async (req, res) => {
     });
 
     if (newlyAchieved.length) {
-      const rows = newlyAchieved.map((milestoneId) => ({
+      const rows = newlyAchieved.map((item) => ({
         customer_id: customerId,
-        milestone_id: milestoneId,
+        milestone_id: item.id,
         achieved_at: new Date().toISOString(),
         reward_status: "pending",
       }));
@@ -278,6 +415,21 @@ router.get("/:customerId", async (req, res) => {
           item.achieved = true;
         }
       }
+
+      for (const item of newlyAchieved) {
+        if (item.criteriaKey === "healthy_foods") {
+          const voucher = await grantBonusVoucher(customerId, "healthy_foods");
+          const milestone = progress.find((p) => p.id === item.id);
+          if (voucher && milestone) {
+            milestone.rewardStatus = "issued";
+            await supabase
+              .from("customer_milestones")
+              .update({ reward_status: "issued" })
+              .eq("customer_id", customerId)
+              .eq("milestone_id", item.id);
+          }
+        }
+      }
     }
 
     const inProgress = progress.filter((m) => !m.achieved);
@@ -289,6 +441,7 @@ router.get("/:customerId", async (req, res) => {
         stats: {
           healthyBaskets,
           recipesTried,
+          healthyFoods,
           loginStreak,
           pantryItems,
           healthySpendPct,

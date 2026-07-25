@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
-import { api, formatCurrency } from "../lib/api";
+import { api, formatCurrency, formatDate, initials } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
 import "./Profile.css";
 
@@ -28,6 +29,7 @@ const GOAL_SUGGESTIONS = [
 
 const SETTINGS_TABS = [
   { id: "account", label: "Account" },
+  { id: "rewards", label: "Rewards" },
   { id: "notifications", label: "Notifications" },
 ];
 
@@ -73,6 +75,34 @@ function bmiMarkerPct(bmi) {
   if (bmi == null) return null;
   const clamped = Math.min(40, Math.max(15, bmi));
   return ((clamped - 15) / 25) * 100;
+}
+
+function resizeImageFile(file, { maxSize = 256, quality = 0.72 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!file?.type?.startsWith("image/")) {
+      reject(new Error("Please choose an image file"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read that image"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Could not load that image"));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function ChipField({
@@ -163,8 +193,13 @@ function ChipField({
 }
 
 export default function Profile() {
-  const { customer } = useCustomer();
-  const [tab, setTab] = useState("account");
+  const { customer, setCustomer } = useCustomer();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fileInputRef = useRef(null);
+  const initialTab = SETTINGS_TABS.some((t) => t.id === searchParams.get("tab"))
+    ? searchParams.get("tab")
+    : "account";
+  const [tab, setTab] = useState(initialTab);
   const [accountPanel, setAccountPanel] = useState("basics");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -172,6 +207,7 @@ export default function Profile() {
   const [budgetError, setBudgetError] = useState("");
   const [saved, setSaved] = useState(false);
   const [baseline, setBaseline] = useState(null);
+  const [vouchers, setVouchers] = useState([]);
   const [form, setForm] = useState({
     budget_monthly: "",
     age: "",
@@ -181,16 +217,34 @@ export default function Profile() {
     health_goals: [],
     milestone_alerts: true,
     recommendation_nudges: true,
+    avatar_url: null,
   });
+
+  useEffect(() => {
+    const next = searchParams.get("tab");
+    if (SETTINGS_TABS.some((t) => t.id === next) && next !== tab) {
+      setTab(next);
+    }
+  }, [searchParams]);
+
+  function selectTab(nextTab) {
+    setTab(nextTab);
+    if (nextTab === "account") {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: nextTab }, { replace: true });
+    }
+  }
 
   useEffect(() => {
     let alive = true;
     api
       .getProfile(customer.id)
-      .then((res) => {
+      .then((profileRes) => {
         if (!alive) return;
-        const profile = res.data.profile || {};
-        const notifications = res.data.notifications || {};
+        const profile = profileRes.data.profile || {};
+        const notifications = profileRes.data.notifications || {};
+        const avatarUrl = profile.avatar_url || null;
         const next = {
           budget_monthly:
             profile.budget_monthly == null ? "" : String(profile.budget_monthly),
@@ -205,9 +259,14 @@ export default function Profile() {
             : [],
           milestone_alerts: notifications.milestone_alerts ?? true,
           recommendation_nudges: notifications.recommendation_nudges ?? true,
+          avatar_url: avatarUrl,
         };
         setForm(next);
         setBaseline(next);
+        setVouchers(Array.isArray(profile.vouchers) ? profile.vouchers : []);
+        if (avatarUrl !== customer.avatarUrl) {
+          setCustomer({ ...customer, avatarUrl });
+        }
       })
       .catch((err) => {
         if (alive) setError(err.message || "Failed to load profile");
@@ -228,13 +287,14 @@ export default function Profile() {
   const markerPct = bmiMarkerPct(bmi);
 
   const profileStrength = useMemo(() => {
-    let score = 15;
+    let score = 10;
+    if (form.avatar_url) score += 10;
     if (form.budget_monthly !== "" && Number(form.budget_monthly) >= 0) score += 20;
     if (form.age !== "") score += 10;
     if (form.weight_kg !== "" && form.height_cm !== "") score += 15;
     if (form.dietary_preferences.length) score += 15;
     if (form.health_goals.length) score += 15;
-    if (form.milestone_alerts || form.recommendation_nudges) score += 10;
+    if (form.milestone_alerts || form.recommendation_nudges) score += 5;
     return Math.min(100, score);
   }, [form]);
 
@@ -298,6 +358,25 @@ export default function Profile() {
     setSaved(false);
   }
 
+  async function onPickAvatar(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setSaved(false);
+      setForm((prev) => ({ ...prev, avatar_url: dataUrl }));
+    } catch (err) {
+      setError(err.message || "Could not use that photo");
+    }
+  }
+
+  function onRemoveAvatar() {
+    setSaved(false);
+    setForm((prev) => ({ ...prev, avatar_url: null }));
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     if (!validateBudget(form.budget_monthly)) {
@@ -316,9 +395,11 @@ export default function Profile() {
         age: form.age === "" ? null : Number(form.age),
         weight_kg: form.weight_kg === "" ? null : Number(form.weight_kg),
         height_cm: form.height_cm === "" ? null : Number(form.height_cm),
+        avatar_url: form.avatar_url || null,
       };
-      await api.updateProfile(customer.id, payload);
-      setBaseline({
+      const res = await api.updateProfile(customer.id, payload);
+      const savedAvatar = res.data?.profile?.avatar_url ?? form.avatar_url ?? null;
+      const nextForm = {
         ...form,
         budget_monthly:
           form.budget_monthly === "" ? "" : String(Number(form.budget_monthly)),
@@ -327,7 +408,11 @@ export default function Profile() {
           form.weight_kg === "" ? "" : String(Number(form.weight_kg)),
         height_cm:
           form.height_cm === "" ? "" : String(Number(form.height_cm)),
-      });
+        avatar_url: savedAvatar,
+      };
+      setBaseline(nextForm);
+      setForm(nextForm);
+      setCustomer({ ...customer, avatarUrl: savedAvatar });
       setSaved(true);
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Save failed");
@@ -339,11 +424,17 @@ export default function Profile() {
   if (loading) return <LoadingBlock label="Loading profile…" />;
 
   const headTitle =
-    tab === "account" ? activeAccountPanel.title : "Notifications";
+    tab === "account"
+      ? activeAccountPanel.title
+      : tab === "rewards"
+        ? "Rewards"
+        : "Notifications";
   const headBlurb =
     tab === "account"
       ? activeAccountPanel.blurb
-      : "Choose which BiteBetter nudges reach you.";
+      : tab === "rewards"
+        ? "Vouchers you’ve claimed with milestone points."
+        : "Choose which BiteBetter nudges reach you.";
 
   return (
     <div className="pf">
@@ -358,9 +449,12 @@ export default function Profile() {
                 key={item.id}
                 type="button"
                 className={tab === item.id ? "is-active" : ""}
-                onClick={() => setTab(item.id)}
+                onClick={() => selectTab(item.id)}
               >
                 {item.label}
+                {item.id === "rewards" && vouchers.length > 0
+                  ? ` (${vouchers.length})`
+                  : ""}
               </button>
             ))}
           </nav>
@@ -389,7 +483,7 @@ export default function Profile() {
             </nav>
           )}
 
-          {saved && (
+          {saved && tab !== "rewards" && (
             <div className="pf-toast" role="status">
               Profile saved — your preferences are up to date.
             </div>
@@ -402,6 +496,43 @@ export default function Profile() {
                 <section className="pf-section">
                   <h3>Signed in</h3>
                   <div className="pf-identity">
+                    <div className="pf-photo-row">
+                      <div className="pf-photo">
+                        {form.avatar_url ? (
+                          <img src={form.avatar_url} alt="" />
+                        ) : (
+                          <span>{initials(customer.name)}</span>
+                        )}
+                      </div>
+                      <div className="pf-photo-actions">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          onChange={onPickAvatar}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          {form.avatar_url ? "Change photo" : "Add photo"}
+                        </button>
+                        {form.avatar_url ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            onClick={onRemoveAvatar}
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                        <p className="pf-hint">
+                          Shown in the top-right avatar. Save Changes to keep it.
+                        </p>
+                      </div>
+                    </div>
                     <div className="pf-identity-row">
                       <strong>{customer.name}</strong>
                       <div className="pf-strength">
@@ -568,6 +699,50 @@ export default function Profile() {
               </>
             )}
 
+            {tab === "rewards" && (
+              <section className="pf-section">
+                <h3>Your vouchers</h3>
+                {vouchers.length === 0 ? (
+                  <div className="pf-voucher-empty">
+                    <p>
+                      No vouchers yet. Earn points from milestones, then claim a
+                      reward on the Rewards page.
+                    </p>
+                    <Link to="/app/rewards" className="btn btn-primary btn-sm">
+                      Go to Rewards
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="pf-voucher-list">
+                    {vouchers.map((v) => (
+                      <article key={v.id} className="pf-voucher-card">
+                        <div className="pf-voucher-top">
+                          <div>
+                            <span className="pf-voucher-status">
+                              {v.status === "active" ? "Active" : v.status}
+                            </span>
+                            <h4>{v.name}</h4>
+                            <p>{v.detail}</p>
+                          </div>
+                          <strong className="pf-voucher-value">
+                            {formatCurrency(v.valueZar)}
+                          </strong>
+                        </div>
+                        <div className="pf-voucher-code">
+                          <span>Code</span>
+                          <code>{v.code}</code>
+                        </div>
+                        <div className="pf-voucher-meta">
+                          <span>{v.pointsCost} pts</span>
+                          <span>Issued {formatDate(v.issuedAt)}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
             {tab === "notifications" && (
               <section className="pf-section">
                 <h3>Alert preferences</h3>
@@ -620,19 +795,21 @@ export default function Profile() {
             )}
           </div>
 
-          <div className="pf-actions-bar">
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={onCancel}
-              disabled={saving}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
+          {tab !== "rewards" && (
+            <div className="pf-actions-bar">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={onCancel}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

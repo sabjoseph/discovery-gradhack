@@ -48,6 +48,9 @@ export const api = {
       action,
     }),
   getMilestones: (customerId) => get(`/api/milestones/${customerId}`),
+  getRewards: (customerId) => get(`/api/rewards/${customerId}`),
+  redeemReward: (customerId, rewardId) =>
+    post(`/api/rewards/${customerId}/redeem`, { rewardId }),
   getProfile: (customerId) => get(`/api/profile/${customerId}`),
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),
   getAnalytics: (customerId, days = 90) =>
