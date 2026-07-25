@@ -7,9 +7,9 @@ const {
   getDatasetEndDate,
 } = require("../utils/health");
 const {
-  groupSpendByMonth,
-  pickActiveBudgetMonth,
-  monthLabel,
+  spendStatsForWindow,
+  windowStartFor,
+  SPEND_WINDOW_LABEL,
 } = require("../utils/budgetMonth");
 
 const router = express.Router();
@@ -30,10 +30,9 @@ router.get("/:customerId", async (req, res) => {
     const since = await daysAgo(days, customerId);
     const datasetEnd = await getDatasetEndDate(customerId);
 
-    const lookbackStart = new Date(datasetEnd);
-    lookbackStart.setMonth(lookbackStart.getMonth() - 5);
-    lookbackStart.setDate(1);
-    lookbackStart.setHours(0, 0, 0, 0);
+    // Fixed 30-day budget window (independent of the 7d/30d trend toggle),
+    // matching the Purchases page summary.
+    const budgetWindowStart = windowStartFor(datasetEnd);
 
     const [
       { data: baskets, error: basketError },
@@ -115,7 +114,7 @@ router.get("/:customerId", async (req, res) => {
         `
         )
         .eq("customer_id", customerId)
-        .gte("purchase_date", lookbackStart.toISOString()),
+        .gte("purchase_date", budgetWindowStart.toISOString()),
     ]);
 
     if (basketError) throw basketError;
@@ -211,9 +210,9 @@ router.get("/:customerId", async (req, res) => {
         }
       : null;
 
-    const byMonth = groupSpendByMonth(recentMonthBaskets || []);
-    const { key: activeMonthKey, stats: activeMonth } = pickActiveBudgetMonth(
-      byMonth,
+    const activeMonth = spendStatsForWindow(
+      recentMonthBaskets,
+      budgetWindowStart,
       datasetEnd
     );
 
@@ -223,7 +222,7 @@ router.get("/:customerId", async (req, res) => {
       budgetMonthly != null && !Number.isNaN(budgetMonthly)
         ? {
             budgetMonthly,
-            monthLabel: monthLabel(activeMonthKey),
+            monthLabel: SPEND_WINDOW_LABEL,
             monthSpend: activeMonth.monthSpend,
             remaining: budgetMonthly - activeMonth.monthSpend,
             usedPct: budgetMonthly

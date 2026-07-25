@@ -1,14 +1,16 @@
 /**
- * Shared month-budget helpers so Home, Purchases and Analytics agree on
- * "spent this month".
+ * Shared spend-window helpers so Home, Purchases and recommendations agree
+ * on "spent in the last 30 days".
  */
 
-function monthKeyFromDate(date) {
-  const d = date instanceof Date ? date : new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function retailerBucket(name) {
+  const label = (name || "").toLowerCase();
+  if (label.includes("checker")) return "checkers";
+  if (label.includes("woolworth") || label.includes("woolies")) return "woolies";
+  return "other";
 }
 
-function emptyMonth() {
+function emptySpendStats() {
   return {
     monthSpend: 0,
     checkersSpend: 0,
@@ -18,106 +20,56 @@ function emptyMonth() {
   };
 }
 
-function retailerBucket(name) {
-  const label = (name || "").toLowerCase();
-  if (label.includes("checker")) return "checkers";
-  if (label.includes("woolworth") || label.includes("woolies")) return "woolies";
-  return "other";
+/** Accepts both backend (snake_case + basket_items) and frontend basket shapes. */
+function addBasketToStats(stats, basket) {
+  let basketTotal = 0;
+  if (Array.isArray(basket.basket_items)) {
+    for (const item of basket.basket_items) {
+      basketTotal += Number(item.line_total || 0);
+    }
+  } else {
+    basketTotal = Number(basket.total || 0);
+  }
+
+  const bucket = retailerBucket(basket.retailers?.name || basket.retailer);
+  stats.monthSpend += basketTotal;
+  stats.basketCount += 1;
+  if (bucket === "checkers") stats.checkersSpend += basketTotal;
+  else if (bucket === "woolies") stats.wooliesSpend += basketTotal;
+  else stats.otherSpend += basketTotal;
 }
 
 /**
- * @param {Array<{purchase_date?: string, purchaseDate?: string, retailers?: {name?: string}, retailer?: string, basket_items?: Array<{line_total?: number}>, total?: number}>} baskets
- * @returns {Record<string, ReturnType<typeof emptyMonth>>}
+ * Start of the rolling 30-day window that ends on the given date
+ * (usually the customer's latest purchase date).
  */
-function groupSpendByMonth(baskets) {
-  const byMonth = {};
+function windowStartFor(endDate, days = 30) {
+  const start = new Date(endDate);
+  start.setDate(start.getDate() - (days - 1));
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+/** Sums spend for baskets that fall inside [startDate, endDate]. */
+function spendStatsForWindow(baskets, startDate, endDate) {
+  const stats = emptySpendStats();
   for (const basket of baskets || []) {
     const raw = basket.purchase_date || basket.purchaseDate;
     if (!raw) continue;
-    const key = raw.slice(0, 7);
-    if (!byMonth[key]) byMonth[key] = emptyMonth();
-
-    let basketTotal = 0;
-    if (Array.isArray(basket.basket_items)) {
-      for (const item of basket.basket_items) {
-        basketTotal += Number(item.line_total || 0);
-      }
-    } else {
-      basketTotal = Number(basket.total || 0);
-    }
-
-    const bucket = retailerBucket(basket.retailers?.name || basket.retailer);
-    byMonth[key].monthSpend += basketTotal;
-    byMonth[key].basketCount += 1;
-    if (bucket === "checkers") byMonth[key].checkersSpend += basketTotal;
-    else if (bucket === "woolies") byMonth[key].wooliesSpend += basketTotal;
-    else byMonth[key].otherSpend += basketTotal;
+    const d = new Date(raw);
+    if (d < startDate || d > endDate) continue;
+    addBasketToStats(stats, basket);
   }
-  return byMonth;
+  return stats;
 }
 
-/**
- * Pick the budget month to display.
- * Uses the calendar month of datasetEnd, unless that month is almost empty
- * (e.g. one scanned receipt) — then falls back to the strongest of the
- * previous two months so Home and Purchases stay aligned with seed data.
- *
- * @param {Record<string, ReturnType<typeof emptyMonth>>} byMonth
- * @param {Date} datasetEnd
- * @returns {{ key: string|null, stats: ReturnType<typeof emptyMonth> }}
- */
-function pickActiveBudgetMonth(byMonth, datasetEnd) {
-  const candidateKeys = [];
-  for (let i = 0; i < 3; i += 1) {
-    const d = new Date(datasetEnd);
-    d.setDate(1);
-    d.setMonth(d.getMonth() - i);
-    const key = monthKeyFromDate(d);
-    if (byMonth[key]) candidateKeys.push(key);
-  }
-
-  let activeKey =
-    candidateKeys[0] || Object.keys(byMonth).sort().pop() || null;
-
-  if (candidateKeys.length > 1) {
-    const latest = byMonth[candidateKeys[0]];
-    const latestIsSparse =
-      latest.basketCount <= 2 ||
-      candidateKeys
-        .slice(1)
-        .some((key) => latest.monthSpend < byMonth[key].monthSpend * 0.25);
-
-    if (latestIsSparse) {
-      activeKey = candidateKeys.slice(1).reduce((best, key) => {
-        const a = byMonth[key];
-        const b = byMonth[best];
-        if (a.monthSpend > b.monthSpend) return key;
-        if (a.monthSpend === b.monthSpend && a.basketCount > b.basketCount) {
-          return key;
-        }
-        return best;
-      }, candidateKeys[1]);
-    }
-  }
-
-  return {
-    key: activeKey,
-    stats: (activeKey && byMonth[activeKey]) || emptyMonth(),
-  };
-}
-
-function monthLabel(key) {
-  if (!key) return "This month";
-  return new Date(`${key}-01T00:00:00`).toLocaleString("en-ZA", {
-    month: "long",
-    year: "numeric",
-  });
-}
+const SPEND_WINDOW_LABEL = "Last 30 days";
 
 module.exports = {
-  groupSpendByMonth,
-  pickActiveBudgetMonth,
-  monthLabel,
-  monthKeyFromDate,
   retailerBucket,
+  emptySpendStats,
+  addBasketToStats,
+  windowStartFor,
+  spendStatsForWindow,
+  SPEND_WINDOW_LABEL,
 };

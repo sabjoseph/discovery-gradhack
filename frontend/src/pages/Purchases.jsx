@@ -16,74 +16,46 @@ function retailerBucket(name) {
 }
 
 // The deployed API may predate /summary, so rebuild the same figures from the
-// basket list and profile budget.
+// basket list and profile budget. Mirrors the backend: rolling 30-day window
+// ending at the latest purchase.
 function summaryFromBaskets(baskets, budgetMonthly) {
   const dated = (baskets || []).filter((b) => b.purchaseDate);
   if (dated.length === 0) return null;
-
-  const byMonth = {};
-  for (const basket of dated) {
-    const key = basket.purchaseDate.slice(0, 7);
-    if (!byMonth[key]) {
-      byMonth[key] = {
-        monthSpend: 0,
-        checkersSpend: 0,
-        wooliesSpend: 0,
-        otherSpend: 0,
-        basketCount: 0,
-      };
-    }
-    const total = Number(basket.total || 0);
-    byMonth[key].monthSpend += total;
-    byMonth[key].basketCount += 1;
-    const bucket = retailerBucket(basket.retailer);
-    if (bucket === "checkers") byMonth[key].checkersSpend += total;
-    else if (bucket === "woolies") byMonth[key].wooliesSpend += total;
-    else byMonth[key].otherSpend += total;
-  }
 
   const latestDate = dated.reduce(
     (max, b) => (b.purchaseDate > max ? b.purchaseDate : max),
     dated[0].purchaseDate
   );
-  const end = new Date(latestDate);
-  const candidateKeys = [];
-  for (let i = 0; i < 3; i += 1) {
-    const d = new Date(end);
-    d.setDate(1);
-    d.setMonth(d.getMonth() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (byMonth[key]) candidateKeys.push(key);
+  const windowEnd = new Date(latestDate);
+  const windowStart = new Date(windowEnd);
+  windowStart.setDate(windowStart.getDate() - 29);
+  windowStart.setHours(0, 0, 0, 0);
+
+  const active = {
+    monthSpend: 0,
+    checkersSpend: 0,
+    wooliesSpend: 0,
+    otherSpend: 0,
+    basketCount: 0,
+  };
+
+  for (const basket of dated) {
+    const d = new Date(basket.purchaseDate);
+    if (d < windowStart || d > windowEnd) continue;
+    const total = Number(basket.total || 0);
+    active.monthSpend += total;
+    active.basketCount += 1;
+    const bucket = retailerBucket(basket.retailer);
+    if (bucket === "checkers") active.checkersSpend += total;
+    else if (bucket === "woolies") active.wooliesSpend += total;
+    else active.otherSpend += total;
   }
 
-  let activeKey = candidateKeys[0] || Object.keys(byMonth).sort().pop();
-  if (candidateKeys.length > 1) {
-    const latest = byMonth[candidateKeys[0]];
-    const latestIsSparse =
-      latest.basketCount <= 2 ||
-      candidateKeys.slice(1).some(
-        (key) => latest.monthSpend < byMonth[key].monthSpend * 0.25
-      );
-    if (latestIsSparse) {
-      activeKey = candidateKeys.slice(1).reduce((best, key) => {
-        const a = byMonth[key];
-        const b = byMonth[best];
-        if (a.monthSpend > b.monthSpend) return key;
-        if (a.monthSpend === b.monthSpend && a.basketCount > b.basketCount) return key;
-        return best;
-      }, candidateKeys[1]);
-    }
-  }
-
-  const active = byMonth[activeKey];
   const hasBudget = budgetMonthly != null && !Number.isNaN(Number(budgetMonthly));
   const budget = hasBudget ? Number(budgetMonthly) : null;
 
   return {
-    monthLabel: new Date(`${activeKey}-01T00:00:00Z`).toLocaleString("en-ZA", {
-      month: "long",
-      year: "numeric",
-    }),
+    monthLabel: "Last 30 days",
     budgetMonthly: budget,
     monthSpend: active.monthSpend,
     checkersSpend: active.checkersSpend,
@@ -462,7 +434,7 @@ export default function Purchases() {
                 {summary
                   ? summary.budgetMonthly != null
                     ? `${formatCurrency(summary.monthSpend)} spent of ${formatCurrency(summary.budgetMonthly)} budget`
-                    : `${formatCurrency(summary.monthSpend)} spent this month`
+                    : `${formatCurrency(summary.monthSpend)} spent in the last 30 days`
                   : summaryError || "Loading summary…"}
               </p>
             </div>

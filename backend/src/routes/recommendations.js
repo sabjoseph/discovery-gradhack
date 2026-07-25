@@ -79,25 +79,16 @@ async function getBudgetContext(customerId) {
   if (budgetMonthly == null || Number.isNaN(budgetMonthly)) return null;
 
   const datasetEnd = await getDatasetEndDate(customerId);
-  const monthStart = new Date(datasetEnd);
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-
-  const lookbackStart = new Date(datasetEnd);
-  lookbackStart.setMonth(lookbackStart.getMonth() - 5);
-  lookbackStart.setDate(1);
-  lookbackStart.setHours(0, 0, 0, 0);
+  const { spendStatsForWindow, windowStartFor } = require("../utils/budgetMonth");
+  const windowStart = windowStartFor(datasetEnd);
 
   const { data: baskets } = await supabase
     .from("baskets")
     .select("purchase_date, retailers ( name ), basket_items ( line_total, unit_price )")
     .eq("customer_id", customerId)
-    .gte("purchase_date", lookbackStart.toISOString());
+    .gte("purchase_date", windowStart.toISOString());
 
-  const { groupSpendByMonth, pickActiveBudgetMonth } = require("../utils/budgetMonth");
-  const byMonth = groupSpendByMonth(baskets || []);
-  const { stats: active } = pickActiveBudgetMonth(byMonth, datasetEnd);
-  const monthSpend = active.monthSpend;
+  const monthSpend = spendStatsForWindow(baskets, windowStart, datasetEnd).monthSpend;
 
   let priceSum = 0;
   let priceCount = 0;

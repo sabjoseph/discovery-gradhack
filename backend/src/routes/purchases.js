@@ -6,9 +6,9 @@ const { extractReceipt } = require("../services/ocr");
 const { uploadReceiptImage, getReceiptForBasket } = require("../services/receiptStorage");
 const { createPurchase, SUPPORTED_STORES } = require("../services/purchaseService");
 const {
-  groupSpendByMonth,
-  pickActiveBudgetMonth,
-  monthLabel,
+  spendStatsForWindow,
+  windowStartFor,
+  SPEND_WINDOW_LABEL,
 } = require("../utils/budgetMonth");
 
 const router = express.Router();
@@ -187,12 +187,9 @@ router.get("/:customerId/summary", async (req, res) => {
     const { customerId } = req.params;
     const datasetEnd = await getDatasetEndDate(customerId);
 
-    // Look back far enough that a single new receipt in a fresh month
-    // doesn't empty the budget ring (seed data is usually the prior month).
-    const lookbackStart = new Date(datasetEnd);
-    lookbackStart.setMonth(lookbackStart.getMonth() - 5);
-    lookbackStart.setDate(1);
-    lookbackStart.setHours(0, 0, 0, 0);
+    // Rolling 30-day window ending at this customer's latest purchase, so the
+    // summary always matches the receipts shown in "Recent".
+    const windowStart = windowStartFor(datasetEnd);
 
     const [{ data: profile }, { data: recentBaskets, error: basketsError }] =
       await Promise.all([
@@ -211,16 +208,12 @@ router.get("/:customerId/summary", async (req, res) => {
           `
           )
           .eq("customer_id", customerId)
-          .gte("purchase_date", lookbackStart.toISOString()),
+          .gte("purchase_date", windowStart.toISOString()),
       ]);
 
     if (basketsError) throw basketsError;
 
-    const byMonth = groupSpendByMonth(recentBaskets || []);
-    const { key: activeKey, stats: active } = pickActiveBudgetMonth(
-      byMonth,
-      datasetEnd
-    );
+    const active = spendStatsForWindow(recentBaskets, windowStart, datasetEnd);
 
     const budgetMonthly =
       profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
@@ -234,7 +227,9 @@ router.get("/:customerId/summary", async (req, res) => {
     res.json({
       success: true,
       data: {
-        monthLabel: monthLabel(activeKey),
+        monthLabel: SPEND_WINDOW_LABEL,
+        windowStart: windowStart.toISOString(),
+        windowEnd: datasetEnd.toISOString(),
         datasetEnd: datasetEnd.toISOString(),
         budgetMonthly: hasBudget ? budgetMonthly : null,
         monthSpend: active.monthSpend,
