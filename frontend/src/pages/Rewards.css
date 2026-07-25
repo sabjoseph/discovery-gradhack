@@ -68,11 +68,43 @@
   flex-wrap: wrap;
 }
 
-.rw-header-stats > div {
+.rw-header-stats > div,
+.rw-header-stats > a.rw-stat-link {
   background: #f3faf0;
   border-radius: 14px;
   padding: 0.7rem 0.9rem;
   min-width: 96px;
+}
+
+.rw-header-stats > a.rw-stat-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.rw-header-stats > a.rw-stat-link:hover {
+  border-color: rgba(123, 188, 67, 0.45);
+  background: #eaf6df;
+  transform: translateY(-1px);
+}
+
+.rw-inline-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rw-inline-link:hover {
+  color: var(--primary-deep);
+  text-decoration: underline;
+}
+
+a.rw-redeem-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .rw-header-stats span {
@@ -99,6 +131,13 @@
   text-align: center;
 }
 
+.rw-top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
 .rw-glance {
   padding: 1.1rem 1.2rem;
 }
@@ -110,7 +149,7 @@
 
 .rw-glance-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.65rem;
 }
 
@@ -135,6 +174,92 @@
   font-family: var(--font-display);
   font-size: 1.2rem;
   color: var(--primary-deep);
+}
+
+.rw-vouchers-panel {
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rw-vouchers-panel .rw-section-head h2 {
+  font-size: 1.05rem;
+}
+
+.rw-vouchers-panel .rw-section-head p {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  margin-top: 0.2rem;
+}
+
+.rw-vouchers-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+  background: rgba(243, 247, 252, 0.9);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+
+.rw-vouchers-empty p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.rw-vouchers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+  max-height: 220px;
+}
+
+.rw-voucher-chip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f3faf0;
+  border: 1px solid rgba(123, 188, 67, 0.28);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+}
+
+.rw-voucher-chip strong {
+  display: block;
+  font-size: 0.86rem;
+  margin-bottom: 0.15rem;
+}
+
+.rw-voucher-chip code {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+.rw-voucher-chip > span {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--primary-deep);
+  white-space: nowrap;
+}
+
+.rw-free-label {
+  color: var(--primary-deep) !important;
+}
+
+.rw-reward-item.is-locked {
+  opacity: 0.78;
+}
+
+.rw-reward-item.is-owned {
+  border-color: rgba(123, 188, 67, 0.45);
+  background: #f3faf0;
 }
 
 .rw-body {
@@ -302,6 +427,57 @@
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.rw-redeem-btn {
+  margin-top: 0.55rem;
+}
+
+.rw-reward-item:not(.is-affordable) .rw-redeem-btn {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.rw-voucher-code {
+  background: #f3faf0;
+  border: 1px dashed rgba(123, 188, 67, 0.55);
+  border-radius: 14px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.rw-voucher-code span {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.rw-voucher-code strong {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  letter-spacing: 0.08em;
+  color: var(--primary-deep);
+}
+
+.rw-modal-meta {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.rw-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.rw-modal-success {
+  border-color: rgba(123, 188, 67, 0.45);
 }
 
 .rw-section {
@@ -511,6 +687,10 @@
 }
 
 @media (max-width: 980px) {
+  .rw-top-row {
+    grid-template-columns: 1fr;
+  }
+
   .rw-body {
     grid-template-columns: 1fr;
   }

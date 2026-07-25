@@ -77,7 +77,8 @@ router.get("/", async (req, res) => {
           product_id,
           category_id,
           quantity_required,
-          unit
+          unit,
+          categories ( id, main_category, subcategory )
         )
       `
       )
@@ -92,6 +93,18 @@ router.get("/", async (req, res) => {
 
     const mapped = (recipes || []).map((recipe) => {
       const score = scoreRecipe(recipe, pantryCats);
+      const categorySet = new Set();
+      for (const ing of recipe.recipe_ingredients || []) {
+        const label =
+          ing.categories?.subcategory != null &&
+          String(ing.categories.subcategory).trim() !== ""
+            ? String(ing.categories.subcategory).trim()
+            : "Uncategorised";
+        categorySet.add(label);
+      }
+      const categories =
+        categorySet.size > 0 ? [...categorySet] : ["Uncategorised"];
+
       return {
         id: recipe.id,
         name: recipe.name,
@@ -101,6 +114,7 @@ router.get("/", async (req, res) => {
         source: recipe.source,
         servings: recipe.servings,
         ingredientCount: recipe.recipe_ingredients?.length || 0,
+        categories,
         ...score,
       };
     });
@@ -166,7 +180,11 @@ router.get("/:id", async (req, res) => {
           quantity: ing.quantity_required,
           unit: ing.unit,
           categoryId: ing.category_id,
-          category: ing.categories?.subcategory,
+          category:
+            ing.categories?.subcategory != null &&
+            String(ing.categories.subcategory).trim() !== ""
+              ? String(ing.categories.subcategory).trim()
+              : "Uncategorised",
           have:
             ing.category_id != null && pantryCats.has(ing.category_id),
         })),
