@@ -288,6 +288,123 @@ export default function Recipes() {
         </div>
       </header>
 
+      <section className="rp-planner panel">
+        <div className="rp-planner-top">
+          <h2>Weekly meal planner</h2>
+          <div className="rp-planner-actions">
+            <button type="button" className="btn btn-outline" onClick={clearWeek}>
+              Clear week
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={handleClearDay}
+              disabled={activeDayMealCount === 0}
+            >
+              Clear {activeDay}
+            </button>
+          </div>
+        </div>
+
+        <div className="rp-week-strip">
+          {DAYS.map((day) => {
+            const filled = MEALS.filter((meal) => plan[day]?.[meal]).length;
+            return (
+              <button
+                key={day}
+                type="button"
+                className={`rp-week-chip ${activeDay === day ? "is-active" : ""}`}
+                onClick={() => setActiveDay(day)}
+              >
+                <strong>{day}</strong>
+                <span>
+                  {filled}/{MEALS.length} meals
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rp-day-meals">
+          <h3>{activeDay}</h3>
+          <div className="rp-meal-grid">
+            {MEALS.map((meal) => {
+              const slot = plan[activeDay]?.[meal];
+              const selecting =
+                assignTarget?.day === activeDay && assignTarget?.meal === meal;
+
+              return (
+                <article
+                  key={meal}
+                  className={`rp-meal-slot ${selecting ? "is-selecting" : ""}`}
+                >
+                  <header>
+                    <span>{meal}</span>
+                    {slot && (
+                      <button
+                        type="button"
+                        className="rp-slot-clear"
+                        onClick={() => clearSlot(activeDay, meal)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </header>
+
+                  {slot ? (
+                    <div className="rp-slot-filled">
+                      <Link to={`/app/recipes/${slot.id}`}>
+                        <strong>{slot.name}</strong>
+                      </Link>
+                      <p>
+                        {slot.prepTimeMinutes} min · serves {slot.servings}
+                        {slot.matchPercent != null
+                          ? ` · ${slot.matchPercent}% match`
+                          : ""}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => setAssignTarget({ day: activeDay, meal })}
+                      >
+                        Change recipe
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="rp-slot-empty"
+                      onClick={() => setAssignTarget({ day: activeDay, meal })}
+                    >
+                      + Add recipe
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        {assignTarget && (
+          <div className="rp-assign-banner">
+            <p>
+              Choosing a recipe for{" "}
+              <strong>
+                {assignTarget.day} · {assignTarget.meal}
+              </strong>
+              . Pick one below.
+            </p>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              onClick={() => setAssignTarget(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </section>
+
       <section id="for-you" className="rp-foryou panel">
         <div className="rp-foryou-head">
           <div>
@@ -406,123 +523,6 @@ export default function Recipes() {
                 </article>
               );
             })}
-          </div>
-        )}
-      </section>
-
-      <section className="rp-planner panel">
-        <div className="rp-planner-top">
-          <h2>Weekly meal planner</h2>
-          <div className="rp-planner-actions">
-            <button type="button" className="btn btn-outline" onClick={clearWeek}>
-              Clear week
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={handleClearDay}
-              disabled={activeDayMealCount === 0}
-            >
-              Clear {activeDay}
-            </button>
-          </div>
-        </div>
-
-        <div className="rp-week-strip">
-          {DAYS.map((day) => {
-            const filled = MEALS.filter((meal) => plan[day]?.[meal]).length;
-            return (
-              <button
-                key={day}
-                type="button"
-                className={`rp-week-chip ${activeDay === day ? "is-active" : ""}`}
-                onClick={() => setActiveDay(day)}
-              >
-                <strong>{day}</strong>
-                <span>
-                  {filled}/{MEALS.length} meals
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="rp-day-meals">
-          <h3>{activeDay}</h3>
-          <div className="rp-meal-grid">
-            {MEALS.map((meal) => {
-              const slot = plan[activeDay]?.[meal];
-              const selecting =
-                assignTarget?.day === activeDay && assignTarget?.meal === meal;
-
-              return (
-                <article
-                  key={meal}
-                  className={`rp-meal-slot ${selecting ? "is-selecting" : ""}`}
-                >
-                  <header>
-                    <span>{meal}</span>
-                    {slot && (
-                      <button
-                        type="button"
-                        className="rp-slot-clear"
-                        onClick={() => clearSlot(activeDay, meal)}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </header>
-
-                  {slot ? (
-                    <div className="rp-slot-filled">
-                      <Link to={`/app/recipes/${slot.id}`}>
-                        <strong>{slot.name}</strong>
-                      </Link>
-                      <p>
-                        {slot.prepTimeMinutes} min · serves {slot.servings}
-                        {slot.matchPercent != null
-                          ? ` · ${slot.matchPercent}% match`
-                          : ""}
-                      </p>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => setAssignTarget({ day: activeDay, meal })}
-                      >
-                        Change recipe
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="rp-slot-empty"
-                      onClick={() => setAssignTarget({ day: activeDay, meal })}
-                    >
-                      + Add recipe
-                    </button>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </div>
-
-        {assignTarget && (
-          <div className="rp-assign-banner">
-            <p>
-              Choosing a recipe for{" "}
-              <strong>
-                {assignTarget.day} · {assignTarget.meal}
-              </strong>
-              . Pick one below.
-            </p>
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              onClick={() => setAssignTarget(null)}
-            >
-              Cancel
-            </button>
           </div>
         )}
       </section>
