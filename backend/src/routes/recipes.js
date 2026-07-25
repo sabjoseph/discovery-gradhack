@@ -1,0 +1,183 @@
+const express = require("express");
+const supabase = require("../supabase");
+
+const router = express.Router();
+
+async function getPantryCategoryIds(customerId) {
+  const { data, error } = await supabase
+    .from("pantry_items")
+    .select("quantity_remaining, products ( category_id )")
+    .eq("customer_id", customerId)
+    .gt("quantity_remaining", 0);
+
+  if (error) throw error;
+
+  const ids = new Set();
+  for (const row of data || []) {
+    const catId = row.products?.category_id;
+    if (catId != null) ids.add(catId);
+  }
+  return ids;
+}
+
+function scoreRecipe(recipe, pantryCats) {
+  const ingredients = recipe.recipe_ingredients || [];
+  const total = ingredients.length || 1;
+  let have = 0;
+  const haveList = [];
+  const needList = [];
+
+  for (const ing of ingredients) {
+    const covered =
+      (ing.category_id != null && pantryCats.has(ing.category_id)) ||
+      (ing.product_id != null && false);
+
+    const entry = {
+      id: ing.id,
+      name: ing.ingredient_name,
+      quantity: ing.quantity_required,
+      unit: ing.unit,
+      categoryId: ing.category_id,
+    };
+
+    if (covered) {
+      have += 1;
+      haveList.push(entry);
+    } else {
+      needList.push(entry);
+    }
+  }
+
+  return {
+    matchCount: have,
+    totalIngredients: ingredients.length,
+    matchPercent: Math.round((have / total) * 100),
+    have: haveList,
+    need: needList,
+  };
+}
+
+router.get("/", async (req, res) => {
+  try {
+    const customerId = req.query.customerId;
+    const { data: recipes, error } = await supabase
+      .from("recipes")
+      .select(
+        `
+        id,
+        name,
+        instructions,
+        prep_time_minutes,
+        health_score,
+        source,
+        servings,
+        recipe_ingredients (
+          id,
+          ingredient_name,
+          product_id,
+          category_id,
+          quantity_required,
+          unit
+        )
+      `
+      )
+      .order("id", { ascending: true });
+
+    if (error) throw error;
+
+    let pantryCats = new Set();
+    if (customerId) {
+      pantryCats = await getPantryCategoryIds(customerId);
+    }
+
+    const mapped = (recipes || []).map((recipe) => {
+      const score = scoreRecipe(recipe, pantryCats);
+      return {
+        id: recipe.id,
+        name: recipe.name,
+        instructions: recipe.instructions,
+        prepTimeMinutes: recipe.prep_time_minutes,
+        healthScore: recipe.health_score,
+        source: recipe.source,
+        servings: recipe.servings,
+        ingredientCount: recipe.recipe_ingredients?.length || 0,
+        ...score,
+      };
+    });
+
+    mapped.sort((a, b) => b.matchPercent - a.matchPercent || b.matchCount - a.matchCount);
+
+    res.json({ success: true, data: mapped });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/:id", async (req, res) => {
+  try {
+    const customerId = req.query.customerId;
+    const { data: recipe, error } = await supabase
+      .from("recipes")
+      .select(
+        `
+        id,
+        name,
+        instructions,
+        prep_time_minutes,
+        health_score,
+        source,
+        servings,
+        recipe_ingredients (
+          id,
+          ingredient_name,
+          product_id,
+          category_id,
+          quantity_required,
+          unit,
+          categories ( id, main_category, subcategory )
+        )
+      `
+      )
+      .eq("id", req.params.id)
+      .single();
+
+    if (error) throw error;
+
+    let pantryCats = new Set();
+    if (customerId) {
+      pantryCats = await getPantryCategoryIds(customerId);
+    }
+
+    const score = scoreRecipe(recipe, pantryCats);
+
+    res.json({
+      success: true,
+      data: {
+        id: recipe.id,
+        name: recipe.name,
+        instructions: recipe.instructions,
+        prepTimeMinutes: recipe.prep_time_minutes,
+        healthScore: recipe.health_score,
+        source: recipe.source,
+        servings: recipe.servings,
+        ingredients: (recipe.recipe_ingredients || []).map((ing) => ({
+          id: ing.id,
+          name: ing.ingredient_name,
+          quantity: ing.quantity_required,
+          unit: ing.unit,
+          categoryId: ing.category_id,
+          category: ing.categories?.subcategory,
+          have:
+            ing.category_id != null && pantryCats.has(ing.category_id),
+        })),
+        ...score,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+module.exports = router;
+module.exports.getPantryCategoryIds = getPantryCategoryIds;
+module.exports.scoreRecipe = scoreRecipe;

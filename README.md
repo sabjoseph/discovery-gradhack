@@ -172,13 +172,14 @@ Hosted on **Render**
 
 ## 👥 Team Meridian
 
-Built with ❤️ during the Discovery GradHack 2026.
 
 ### Team Members
 
+- Ayesha Ally
 - Sabastian Joseph
-- *Add teammate*
-- *Add teammate*
+- Muhammed Ebrahim Suleman
+- Taskeen Tayob
+- Roko Vidjak
 
 ---
 
