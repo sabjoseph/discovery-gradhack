@@ -338,11 +338,17 @@ export default function NamePicker() {
         </section>
       </div>
 
-      <img
-        className="np-mascot"
-        src="/leaf-mascot.png"
-        alt="BiteBetter mascot"
-      />
+      <aside className="np-leafy" aria-label="Leafy welcome">
+        <p className="np-leafy-bubble">
+          Hi, I&apos;m Leafy! Find your name below and I&apos;ll show you
+          what&apos;s in your kitchen 🍃
+        </p>
+        <img
+          className="np-leafy-char"
+          src="/assets/bitebetter-leaf.png"
+          alt=""
+        />
+      </aside>
 
       <footer className="np-footer">
         <div className="np-footer-left">
