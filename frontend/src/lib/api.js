@@ -48,6 +48,8 @@ export const api = {
   getMilestones: (customerId) => get(`/api/milestones/${customerId}`),
   getProfile: (customerId) => get(`/api/profile/${customerId}`),
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),
+  getAnalytics: (customerId, days = 90) =>
+    get(`/api/analytics/${customerId}`, { days }),
 };
 
 export function formatCurrency(value) {
