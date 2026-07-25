@@ -138,8 +138,8 @@ export default function NamePicker() {
     try {
       const res = await api.createCustomer(first, last);
       const person = res.data;
-      setCustomer({ id: person.id, name: person.name });
-      navigate("/app/profile?setup=1");
+      const ok = await activateCustomer(person);
+      if (ok) navigate("/app/profile?setup=1");
     } catch (err) {
       const existing = err.response?.data?.data;
       if (err.response?.status === 409 && existing?.id) {
@@ -246,9 +246,9 @@ export default function NamePicker() {
                           setSelected(person);
                           setError("");
                         }}
-                        onDoubleClick={() => {
-                          setCustomer({ id: person.id, name: person.name });
-                          navigate("/app");
+                        onDoubleClick={async () => {
+                          const ok = await activateCustomer(person);
+                          if (ok) navigate("/app");
                         }}
                       >
                         <span className="np-result-avatar">
