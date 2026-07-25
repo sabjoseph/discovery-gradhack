@@ -9,6 +9,7 @@ const dashboardRouter = require("./routes/dashboard");
 const recommendationsRouter = require("./routes/recommendations");
 const milestonesRouter = require("./routes/milestones");
 const profileRouter = require("./routes/profile");
+const chatAssistantRouter = require("./routes/chatAssistant");
 const analyticsRouter = require("./routes/analytics");
 const rewardsRouter = require("./routes/rewards");
 
@@ -33,6 +34,7 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/milestones", milestonesRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/chat-assistant", chatAssistantRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/rewards", rewardsRouter);
 
