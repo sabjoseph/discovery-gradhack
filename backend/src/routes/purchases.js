@@ -1,8 +1,29 @@
 const express = require("express");
+const multer = require("multer");
 const supabase = require("../config/supabase");
 const { classifyFromLabel, getDatasetEndDate } = require("../utils/health");
+const { extractReceipt } = require("../services/ocr");
+const { uploadReceiptImage, getReceiptForBasket } = require("../services/receiptStorage");
+const { createPurchase, SUPPORTED_STORES } = require("../services/purchaseService");
 
 const router = express.Router();
+
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "application/pdf",
+]);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype)) return cb(null, true);
+    cb(new Error("Unsupported file type. Use JPG, PNG, WEBP, HEIC or PDF."));
+  },
+});
 
 function retailerBucket(name) {
   const label = (name || "").toLowerCase();
@@ -30,6 +51,103 @@ function mapItem(item) {
     healthTag: classifyFromLabel(label, cat?.main_category),
   };
 }
+
+// Step 1 of the add-purchase flow: upload a receipt image, run OCR, return an
+// editable draft. The image is stored immediately so the saved purchase can
+// link back to it.
+router.post("/:customerId/receipt/parse", (req, res) => {
+  upload.single("receipt")(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) {
+        return res.status(400).json({ success: false, message: uploadErr.message });
+      }
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No receipt file received." });
+      }
+
+      const { customerId } = req.params;
+      const image = await uploadReceiptImage(customerId, req.file.buffer, req.file.mimetype);
+      const { provider, rawText, draft } = await extractReceipt(req.file.buffer, req.file.mimetype);
+
+      if (!draft.store && draft.unsupportedStore) {
+        return res.status(422).json({
+          success: false,
+          code: "UNSUPPORTED_STORE",
+          detectedStore: draft.unsupportedStore,
+          message: "Only Checkers and Woolworths receipts are currently supported.",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          provider,
+          store: draft.store,
+          purchaseDate: draft.purchaseDate,
+          basketTotal: draft.basketTotal,
+          items: draft.items || [],
+          rawText,
+          receiptImage: image,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+});
+
+// Step 2: save the reviewed purchase. Creates basket + items, syncs the
+// pantry, stores the receipt record and logs the activity.
+router.post("/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const { store, purchaseDate, items, receipt } = req.body || {};
+
+    if (!SUPPORTED_STORES.includes(store)) {
+      return res.status(422).json({
+        success: false,
+        code: "UNSUPPORTED_STORE",
+        message: "Only Checkers and Woolworths receipts are currently supported.",
+      });
+    }
+    if (!purchaseDate || Number.isNaN(new Date(purchaseDate).getTime())) {
+      return res.status(400).json({ success: false, message: "A valid purchase date is required." });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: "At least one item is required." });
+    }
+
+    const cleanItems = [];
+    for (const item of items) {
+      const name = String(item?.name || "").trim();
+      const quantity = Number(item?.quantity);
+      const unitPrice = Number(item?.unitPrice);
+      const lineTotal = Number(item?.lineTotal ?? quantity * unitPrice);
+      if (!name) {
+        return res.status(400).json({ success: false, message: "Every item needs a name." });
+      }
+      if (!(quantity > 0) || !(unitPrice >= 0) || !(lineTotal >= 0)) {
+        return res.status(400).json({
+          success: false,
+          message: `Check quantity and price for "${name}".`,
+        });
+      }
+      cleanItems.push({ name, quantity, unitPrice, lineTotal });
+    }
+
+    const result = await createPurchase({
+      customerId,
+      store,
+      purchaseDate,
+      items: cleanItems,
+      receipt,
+    });
+
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, message: err.message });
+  }
+});
 
 router.get("/:customerId/meta", async (req, res) => {
   try {
@@ -70,11 +188,15 @@ router.get("/:customerId/summary", async (req, res) => {
   try {
     const { customerId } = req.params;
     const datasetEnd = await getDatasetEndDate();
-    const monthStart = new Date(datasetEnd);
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
 
-    const [{ data: profile }, { data: monthBaskets, error: monthError }] =
+    // Look back far enough that a single new receipt in a fresh month
+    // doesn't empty the budget ring (seed data is usually the prior month).
+    const lookbackStart = new Date(datasetEnd);
+    lookbackStart.setMonth(lookbackStart.getMonth() - 5);
+    lookbackStart.setDate(1);
+    lookbackStart.setHours(0, 0, 0, 0);
+
+    const [{ data: profile }, { data: recentBaskets, error: basketsError }] =
       await Promise.all([
         supabase
           .from("user_profiles")
@@ -91,37 +213,87 @@ router.get("/:customerId/summary", async (req, res) => {
           `
           )
           .eq("customer_id", customerId)
-          .gte("purchase_date", monthStart.toISOString()),
+          .gte("purchase_date", lookbackStart.toISOString()),
       ]);
 
-    if (monthError) throw monthError;
+    if (basketsError) throw basketsError;
 
-    let monthSpend = 0;
-    let checkersSpend = 0;
-    let wooliesSpend = 0;
-    let otherSpend = 0;
-    let basketCount = 0;
-
-    for (const basket of monthBaskets || []) {
-      basketCount += 1;
+    // Group spend by calendar month (YYYY-MM), then pick the active budget
+    // month from the most recent few months. A single OCR save in a brand-new
+    // month shouldn't empty the ring (seed shopping is usually the prior month).
+    const byMonth = {};
+    for (const basket of recentBaskets || []) {
+      if (!basket.purchase_date) continue;
+      const key = basket.purchase_date.slice(0, 7);
+      if (!byMonth[key]) {
+        byMonth[key] = {
+          monthSpend: 0,
+          checkersSpend: 0,
+          wooliesSpend: 0,
+          otherSpend: 0,
+          basketCount: 0,
+        };
+      }
       let basketTotal = 0;
       for (const item of basket.basket_items || []) {
         basketTotal += Number(item.line_total || 0);
       }
-      monthSpend += basketTotal;
       const bucket = retailerBucket(basket.retailers?.name);
-      if (bucket === "checkers") checkersSpend += basketTotal;
-      else if (bucket === "woolies") wooliesSpend += basketTotal;
-      else otherSpend += basketTotal;
+      byMonth[key].monthSpend += basketTotal;
+      byMonth[key].basketCount += 1;
+      if (bucket === "checkers") byMonth[key].checkersSpend += basketTotal;
+      else if (bucket === "woolies") byMonth[key].wooliesSpend += basketTotal;
+      else byMonth[key].otherSpend += basketTotal;
     }
+
+    const candidateKeys = [];
+    for (let i = 0; i < 3; i += 1) {
+      const d = new Date(datasetEnd);
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (byMonth[key]) candidateKeys.push(key);
+    }
+
+    let activeKey = candidateKeys[0] || Object.keys(byMonth).sort().pop() || null;
+    if (candidateKeys.length > 1) {
+      const latest = byMonth[candidateKeys[0]];
+      const latestIsSparse =
+        latest.basketCount <= 2 ||
+        candidateKeys.slice(1).some(
+          (key) => latest.monthSpend < byMonth[key].monthSpend * 0.25
+        );
+
+      if (latestIsSparse) {
+        activeKey = candidateKeys.slice(1).reduce((best, key) => {
+          const a = byMonth[key];
+          const b = byMonth[best];
+          if (a.monthSpend > b.monthSpend) return key;
+          if (a.monthSpend === b.monthSpend && a.basketCount > b.basketCount) return key;
+          return best;
+        }, candidateKeys[1]);
+      }
+    }
+
+    const active = (activeKey && byMonth[activeKey]) || {
+      monthSpend: 0,
+      checkersSpend: 0,
+      wooliesSpend: 0,
+      otherSpend: 0,
+      basketCount: 0,
+    };
+
+    const monthStart = activeKey
+      ? new Date(`${activeKey}-01T00:00:00`)
+      : new Date(datasetEnd.getFullYear(), datasetEnd.getMonth(), 1);
 
     const budgetMonthly =
       profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
     const hasBudget = budgetMonthly != null && !Number.isNaN(budgetMonthly);
-    const remaining = hasBudget ? budgetMonthly - monthSpend : null;
+    const remaining = hasBudget ? budgetMonthly - active.monthSpend : null;
     const usedPct =
       hasBudget && budgetMonthly > 0
-        ? Math.min(100, Math.round((monthSpend / budgetMonthly) * 100))
+        ? Math.min(100, Math.round((active.monthSpend / budgetMonthly) * 100))
         : 0;
 
     res.json({
@@ -133,13 +305,13 @@ router.get("/:customerId/summary", async (req, res) => {
         }),
         datasetEnd: datasetEnd.toISOString(),
         budgetMonthly: hasBudget ? budgetMonthly : null,
-        monthSpend,
-        checkersSpend,
-        wooliesSpend,
-        otherSpend,
+        monthSpend: active.monthSpend,
+        checkersSpend: active.checkersSpend,
+        wooliesSpend: active.wooliesSpend,
+        otherSpend: active.otherSpend,
         remaining,
         usedPct,
-        basketCount,
+        basketCount: active.basketCount,
       },
     });
   } catch (err) {
@@ -274,6 +446,8 @@ router.get("/:customerId/:basketId", async (req, res) => {
       mix.total += amount;
     }
 
+    const receipt = await getReceiptForBasket(customerId, basketId).catch(() => null);
+
     res.json({
       success: true,
       data: {
@@ -292,6 +466,7 @@ router.get("/:customerId/:basketId", async (req, res) => {
             : 0,
         },
         items,
+        receipt,
       },
     });
   } catch (err) {
