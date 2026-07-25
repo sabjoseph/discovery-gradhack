@@ -514,6 +514,47 @@ export default function Purchases() {
             </div>
           )}
 
+          {summary?.healthMix?.total > 0 && (
+            <div className="ph-health-summary">
+              <div className="ph-health-head">
+                <strong>Food mix</strong>
+                <span>Based on spend in the last 30 days</span>
+              </div>
+              <div
+                className="ph-health-bar"
+                role="img"
+                aria-label={`${summary.healthMix.healthyPct}% healthy, ${summary.healthMix.neutralPct}% neutral, ${summary.healthMix.unhealthyPct}% less healthy`}
+              >
+                <span
+                  className="healthy"
+                  style={{ width: `${summary.healthMix.healthyPct}%` }}
+                />
+                <span
+                  className="neutral"
+                  style={{ width: `${summary.healthMix.neutralPct}%` }}
+                />
+                <span
+                  className="unhealthy"
+                  style={{ width: `${summary.healthMix.unhealthyPct}%` }}
+                />
+              </div>
+              <div className="ph-health-key">
+                <span>
+                  <i className="healthy" aria-hidden />
+                  Healthy {summary.healthMix.healthyPct}%
+                </span>
+                <span>
+                  <i className="neutral" aria-hidden />
+                  Neutral {summary.healthMix.neutralPct}%
+                </span>
+                <span>
+                  <i className="unhealthy" aria-hidden />
+                  Less healthy {summary.healthMix.unhealthyPct}%
+                </span>
+              </div>
+            </div>
+          )}
+
           {!summary && (
             <button
               type="button"
