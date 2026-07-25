@@ -10,7 +10,6 @@ import Purchases from "./pages/Purchases";
 import Pantry from "./pages/Pantry";
 import Recipes from "./pages/Recipes";
 import RecipeDetail from "./pages/RecipeDetail";
-import Recommendations from "./pages/Recommendations";
 import Rewards from "./pages/Rewards";
 import Profile from "./pages/Profile";
 
@@ -29,7 +28,10 @@ export default function App() {
                   <Route path="pantry" element={<Pantry />} />
                   <Route path="recipes" element={<Recipes />} />
                   <Route path="recipes/:id" element={<RecipeDetail />} />
-                  <Route path="recommendations" element={<Recommendations />} />
+                  <Route
+                    path="recommendations"
+                    element={<Navigate to="/app/recipes#for-you" replace />}
+                  />
                   <Route path="rewards" element={<Rewards />} />
                   <Route path="profile" element={<Profile />} />
                 </Route>

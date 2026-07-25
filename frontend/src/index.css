@@ -152,6 +152,19 @@ img {
   border: 1px solid var(--border);
 }
 
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:disabled:hover,
+.btn[disabled]:hover {
+  transform: none;
+}
+
 .btn-danger {
   background: #fdecec;
   color: var(--danger);

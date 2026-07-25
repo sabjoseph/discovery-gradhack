@@ -24,7 +24,7 @@ const AISLES = [
   },
   {
     id: 3,
-    to: "/app/recommendations",
+    to: "/app/recipes#for-you",
     title: "Vitality Analytics",
     blurb: "See healthier picks tailored to your shopping patterns.",
     image:
