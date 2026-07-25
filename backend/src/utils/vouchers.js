@@ -50,7 +50,7 @@ const REWARD_CATALOG = [
   {
     id: "discovery-cookery",
     name: "The Cookery voucher",
-    detail: "Unlock The Cookery session by buying 10 healthy foods this month",
+    detail: "Free when you buy 10 healthy foods this month",
     points: 0,
     valueZar: 500,
     unlockCriteria: "healthy_foods",

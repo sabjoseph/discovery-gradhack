@@ -242,8 +242,8 @@ export default function Recipes() {
         <div>
           <h1>Recipes</h1>
           <p>
-            Personalised picks from your pantry, a weekly meal plan, and the full
-            catalogue ranked by what you already have.
+            Personalised picks based on what you already have, a weekly meal
+            plan, and the full recipe catalogue.
           </p>
         </div>
         <div className="rp-header-actions">
@@ -263,8 +263,8 @@ export default function Recipes() {
             <p className="rp-foryou-kicker">For you</p>
             <h2>Recommendations</h2>
             <p>
-              Rule-based picks scored from your pantry — saved to your profile so
-              they persist between visits. Accepting adds a meal to your plan.
+              Suggestions matched to your pantry. Accept one to add it to your
+              meal plan.
             </p>
           </div>
           {budget && (
