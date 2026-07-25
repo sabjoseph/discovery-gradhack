@@ -69,8 +69,167 @@
   line-height: 1.55;
 }
 
+.dash-hello-goal {
+  margin: 0 0 0.45rem !important;
+}
+
+.dash-hello-goal strong {
+  color: #c8ef9a;
+}
+
+.dash-hello-goal a {
+  color: #c8ef9a;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dash-hello-goal a:hover {
+  color: #fff;
+}
+
+.dash-layout-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dash-pantry-expiry-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.dash-pantry-expiry-stat strong {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--unhealthy);
+}
+
+.dash-pantry-expiry-stat.is-clear strong {
+  color: var(--primary-deep);
+}
+
+.dash-pantry-expiry-stat span {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.dash-expiry-pill.is-expired {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
 .dash-hello strong {
   color: #c8ef9a;
+}
+
+.dash-wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: dash-wave 1.6s ease-in-out 0.4s 2;
+}
+
+@keyframes dash-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(18deg);
+  }
+  40% {
+    transform: rotate(-8deg);
+  }
+  60% {
+    transform: rotate(14deg);
+  }
+  80% {
+    transform: rotate(-4deg);
+  }
+}
+
+.dash-wins-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dash-win {
+  background: rgba(243, 250, 240, 0.95);
+  border: 1px solid rgba(123, 188, 67, 0.22);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+}
+
+.dash-win-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+  margin-bottom: 0.25rem;
+}
+
+.dash-win strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--secondary);
+  margin-bottom: 0.2rem;
+}
+
+.dash-win p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.dash-empty-positive {
+  color: var(--primary-deep) !important;
+}
+
+.dash-goal {
+  text-align: left;
+  padding: 1.25rem 1.35rem;
+}
+
+.dash-goal-kicker {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--primary-deep);
+}
+
+.dash-goal h2 {
+  margin: 0 0 0.55rem;
+  font-size: clamp(1.25rem, 2.2vw, 1.7rem);
+  color: var(--secondary);
+  line-height: 1.25;
+}
+
+.dash-goal-copy {
+  margin: 0 0 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  max-width: 34rem;
+}
+
+.dash-goal-link {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--primary-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dash-goal-link:hover {
+  color: var(--primary);
 }
 
 .dash-kicker {
@@ -93,15 +252,23 @@
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.8);
+  font: inherit;
   font-weight: 700;
   border-radius: 999px;
   padding: 0.4rem 0.75rem;
+  text-decoration: none;
   cursor: pointer;
 }
 
 .dash-period button.is-active {
   background: var(--primary);
   color: #fff;
+}
+
+.dash.is-refreshing .dash-wins,
+.dash.is-refreshing .dash-panels > .dash-card:first-child {
+  opacity: 0.72;
+  transition: opacity 0.2s ease;
 }
 
 .dash-aisles {
@@ -173,10 +340,144 @@
   letter-spacing: 0.04em;
 }
 
+.dash-wins-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.dash-status-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 5.65rem;
+}
+
+.dash-status-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  width: 100%;
+  min-height: 3.35rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 12px;
+  text-decoration: none;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 14px rgba(0, 27, 68, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dash-status-card:hover {
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.dash-status-card.is-expired {
+  background: linear-gradient(145deg, #c43c3c 0%, #9f1d1d 100%);
+  box-shadow: 0 6px 14px rgba(159, 29, 29, 0.28);
+}
+
+.dash-status-card.is-soon {
+  background: linear-gradient(145deg, #e09a2f 0%, #c47812 100%);
+  box-shadow: 0 6px 14px rgba(196, 120, 18, 0.28);
+}
+
+.dash-status-card.is-fresh {
+  background: linear-gradient(145deg, #7bbc43 0%, #4f8f24 100%);
+  box-shadow: 0 6px 14px rgba(79, 143, 36, 0.28);
+}
+
+.dash-status-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+.dash-status-count {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .dash-panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.9rem;
+}
+
+.dash-spend-compact {
+  padding: 0.9rem 1rem;
+}
+
+.dash-spend-compact .dash-card-head {
+  margin-bottom: 0.55rem;
+}
+
+.dash-spend-compact .dash-mix-bar {
+  height: 8px;
+  margin-bottom: 0.45rem;
+}
+
+.dash-spend-compact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dash-spend-pct {
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--primary-deep);
+  line-height: 1;
+}
+
+.dash-spend-compact .dash-footnote {
+  margin-top: 0;
+  font-size: 0.78rem;
+}
+
+.dash-spend-key {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.85rem;
+}
+
+.dash-spend-key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.dash-key-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.dash-key-swatch.healthy {
+  background: var(--healthy);
+}
+
+.dash-key-swatch.neutral {
+  background: #94a3b8;
+}
+
+.dash-key-swatch.unhealthy {
+  background: var(--unhealthy);
 }
 
 .dash-card {
@@ -556,7 +857,19 @@
 
   .dash-aisles,
   .dash-panels,
-  .dash-budget-grid {
+  .dash-wins-row,
+  .dash-budget-grid,
+  .dash-wins-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dash-status-stack {
+    width: 100%;
+    flex-direction: row;
+  }
+
+  .dash-status-card {
+    flex: 1;
+    min-height: 3.1rem;
   }
 }

@@ -1,15 +1,34 @@
 const express = require("express");
+const multer = require("multer");
 const supabase = require("../config/supabase");
 const { classifyFromLabel, getDatasetEndDate } = require("../utils/health");
+const { extractReceipt } = require("../services/ocr");
+const { uploadReceiptImage, getReceiptForBasket } = require("../services/receiptStorage");
+const { createPurchase, SUPPORTED_STORES } = require("../services/purchaseService");
+const {
+  spendStatsForWindow,
+  windowStartFor,
+  SPEND_WINDOW_LABEL,
+} = require("../utils/budgetMonth");
 
 const router = express.Router();
 
-function retailerBucket(name) {
-  const label = (name || "").toLowerCase();
-  if (label.includes("checker")) return "checkers";
-  if (label.includes("woolworth") || label.includes("woolies")) return "woolies";
-  return "other";
-}
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "application/pdf",
+]);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype)) return cb(null, true);
+    cb(new Error("Unsupported file type. Use JPG, PNG, WEBP, HEIC or PDF."));
+  },
+});
 
 function mapItem(item) {
   const cat = item.products?.categories;
@@ -30,6 +49,103 @@ function mapItem(item) {
     healthTag: classifyFromLabel(label, cat?.main_category),
   };
 }
+
+// Step 1 of the add-purchase flow: upload a receipt image, run OCR, return an
+// editable draft. The image is stored immediately so the saved purchase can
+// link back to it.
+router.post("/:customerId/receipt/parse", (req, res) => {
+  upload.single("receipt")(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) {
+        return res.status(400).json({ success: false, message: uploadErr.message });
+      }
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No receipt file received." });
+      }
+
+      const { customerId } = req.params;
+      const image = await uploadReceiptImage(customerId, req.file.buffer, req.file.mimetype);
+      const { provider, rawText, draft } = await extractReceipt(req.file.buffer, req.file.mimetype);
+
+      if (!draft.store && draft.unsupportedStore) {
+        return res.status(422).json({
+          success: false,
+          code: "UNSUPPORTED_STORE",
+          detectedStore: draft.unsupportedStore,
+          message: "Only Checkers and Woolworths receipts are currently supported.",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          provider,
+          store: draft.store,
+          purchaseDate: draft.purchaseDate,
+          basketTotal: draft.basketTotal,
+          items: draft.items || [],
+          rawText,
+          receiptImage: image,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+});
+
+// Step 2: save the reviewed purchase. Creates basket + items, syncs the
+// pantry, stores the receipt record and logs the activity.
+router.post("/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const { store, purchaseDate, items, receipt } = req.body || {};
+
+    if (!SUPPORTED_STORES.includes(store)) {
+      return res.status(422).json({
+        success: false,
+        code: "UNSUPPORTED_STORE",
+        message: "Only Checkers and Woolworths receipts are currently supported.",
+      });
+    }
+    if (!purchaseDate || Number.isNaN(new Date(purchaseDate).getTime())) {
+      return res.status(400).json({ success: false, message: "A valid purchase date is required." });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: "At least one item is required." });
+    }
+
+    const cleanItems = [];
+    for (const item of items) {
+      const name = String(item?.name || "").trim();
+      const quantity = Number(item?.quantity);
+      const unitPrice = Number(item?.unitPrice);
+      const lineTotal = Number(item?.lineTotal ?? quantity * unitPrice);
+      if (!name) {
+        return res.status(400).json({ success: false, message: "Every item needs a name." });
+      }
+      if (!(quantity > 0) || !(unitPrice >= 0) || !(lineTotal >= 0)) {
+        return res.status(400).json({
+          success: false,
+          message: `Check quantity and price for "${name}".`,
+        });
+      }
+      cleanItems.push({ name, quantity, unitPrice, lineTotal });
+    }
+
+    const result = await createPurchase({
+      customerId,
+      store,
+      purchaseDate,
+      items: cleanItems,
+      receipt,
+    });
+
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, message: err.message });
+  }
+});
 
 router.get("/:customerId/meta", async (req, res) => {
   try {
@@ -69,12 +185,13 @@ router.get("/:customerId/meta", async (req, res) => {
 router.get("/:customerId/summary", async (req, res) => {
   try {
     const { customerId } = req.params;
-    const datasetEnd = await getDatasetEndDate();
-    const monthStart = new Date(datasetEnd);
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    const datasetEnd = await getDatasetEndDate(customerId);
 
-    const [{ data: profile }, { data: monthBaskets, error: monthError }] =
+    // Rolling 30-day window ending at this customer's latest purchase, so the
+    // summary always matches the receipts shown in "Recent".
+    const windowStart = windowStartFor(datasetEnd);
+
+    const [{ data: profile }, { data: recentBaskets, error: basketsError }] =
       await Promise.all([
         supabase
           .from("user_profiles")
@@ -87,59 +204,81 @@ router.get("/:customerId/summary", async (req, res) => {
             `
             purchase_date,
             retailers ( name ),
-            basket_items ( line_total )
+            basket_items (
+              line_total,
+              products (
+                categories (
+                  main_category,
+                  health_classifications ( classification )
+                )
+              )
+            )
           `
           )
           .eq("customer_id", customerId)
-          .gte("purchase_date", monthStart.toISOString()),
+          .gte("purchase_date", windowStart.toISOString()),
       ]);
 
-    if (monthError) throw monthError;
+    if (basketsError) throw basketsError;
 
-    let monthSpend = 0;
-    let checkersSpend = 0;
-    let wooliesSpend = 0;
-    let otherSpend = 0;
-    let basketCount = 0;
+    const active = spendStatsForWindow(recentBaskets, windowStart, datasetEnd);
+    const healthMix = { healthy: 0, neutral: 0, unhealthy: 0, total: 0 };
 
-    for (const basket of monthBaskets || []) {
-      basketCount += 1;
-      let basketTotal = 0;
+    for (const basket of recentBaskets || []) {
+      const purchaseDate = new Date(basket.purchase_date);
+      if (purchaseDate < windowStart || purchaseDate > datasetEnd) continue;
+
       for (const item of basket.basket_items || []) {
-        basketTotal += Number(item.line_total || 0);
+        const category = item.products?.categories;
+        const nested = category?.health_classifications;
+        const classification = Array.isArray(nested)
+          ? nested[0]?.classification
+          : nested?.classification;
+        const tag = classifyFromLabel(classification, category?.main_category);
+        const amount = Number(item.line_total || 0);
+        healthMix[tag] += amount;
+        healthMix.total += amount;
       }
-      monthSpend += basketTotal;
-      const bucket = retailerBucket(basket.retailers?.name);
-      if (bucket === "checkers") checkersSpend += basketTotal;
-      else if (bucket === "woolies") wooliesSpend += basketTotal;
-      else otherSpend += basketTotal;
     }
+
+    const healthMixWithPct = {
+      ...healthMix,
+      healthyPct: healthMix.total
+        ? Math.round((healthMix.healthy / healthMix.total) * 100)
+        : 0,
+      neutralPct: healthMix.total
+        ? Math.round((healthMix.neutral / healthMix.total) * 100)
+        : 0,
+      unhealthyPct: healthMix.total
+        ? Math.round((healthMix.unhealthy / healthMix.total) * 100)
+        : 0,
+    };
 
     const budgetMonthly =
       profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
     const hasBudget = budgetMonthly != null && !Number.isNaN(budgetMonthly);
-    const remaining = hasBudget ? budgetMonthly - monthSpend : null;
+    const remaining = hasBudget ? budgetMonthly - active.monthSpend : null;
     const usedPct =
       hasBudget && budgetMonthly > 0
-        ? Math.min(100, Math.round((monthSpend / budgetMonthly) * 100))
+        ? Math.min(100, Math.round((active.monthSpend / budgetMonthly) * 100))
         : 0;
 
     res.json({
       success: true,
       data: {
-        monthLabel: monthStart.toLocaleString("en-ZA", {
-          month: "long",
-          year: "numeric",
-        }),
+        monthLabel: SPEND_WINDOW_LABEL,
+        windowStart: windowStart.toISOString(),
+        windowEnd: datasetEnd.toISOString(),
         datasetEnd: datasetEnd.toISOString(),
         budgetMonthly: hasBudget ? budgetMonthly : null,
-        monthSpend,
-        checkersSpend,
-        wooliesSpend,
-        otherSpend,
+        monthSpend: active.monthSpend,
+        checkersSpend: active.checkersSpend,
+        wooliesSpend: active.wooliesSpend,
+        otherSpend: active.otherSpend,
         remaining,
         usedPct,
-        basketCount,
+        basketCount: active.basketCount,
+        healthMix: healthMixWithPct,
       },
     });
   } catch (err) {
@@ -274,6 +413,8 @@ router.get("/:customerId/:basketId", async (req, res) => {
       mix.total += amount;
     }
 
+    const receipt = await getReceiptForBasket(customerId, basketId).catch(() => null);
+
     res.json({
       success: true,
       data: {
@@ -292,6 +433,7 @@ router.get("/:customerId/:basketId", async (req, res) => {
             : 0,
         },
         items,
+        receipt,
       },
     });
   } catch (err) {

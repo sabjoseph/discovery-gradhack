@@ -36,6 +36,18 @@ export const api = {
     get(`/api/purchases/${customerId}/summary`),
   getPurchaseBasket: (customerId, basketId) =>
     get(`/api/purchases/${customerId}/${basketId}`),
+  parseReceipt: async (customerId, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    // OCR can be slow on first run (model download), so allow extra time.
+    const { data } = await client.post(
+      `/api/purchases/${customerId}/receipt/parse`,
+      form,
+      { timeout: 120000 }
+    );
+    return data;
+  },
+  createPurchase: (customerId, body) => post(`/api/purchases/${customerId}`, body),
   getPantry: (customerId) => get(`/api/pantry/${customerId}`),
   usePantryItem: (customerId, itemId, amount = 1) =>
     post(`/api/pantry/${customerId}/${itemId}/use`, { amount }),
@@ -43,6 +55,8 @@ export const api = {
     get("/api/recipes", customerId ? { customerId } : undefined),
   getRecipe: (id, customerId) =>
     get(`/api/recipes/${id}`, customerId ? { customerId } : undefined),
+  logRecipeTried: (customerId, recipeId) =>
+    post("/api/recipes/tried", { customerId, recipeId }),
   getRecommendations: (customerId) =>
     get(`/api/recommendations/${customerId}`),
   actOnRecommendation: (customerId, recommendationId, action) =>
@@ -76,7 +90,8 @@ export function formatCurrency(value) {
   return new Intl.NumberFormat("en-ZA", {
     style: "currency",
     currency: "ZAR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(Number(value || 0));
 }
 

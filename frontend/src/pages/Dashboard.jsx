@@ -1,106 +1,188 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
-import { api, formatCurrency, formatDate } from "../lib/api";
+import { api, formatCurrency } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
+import { LEAF_SRC, openLeafyChat } from "../components/FloatingCharacter";
+import "../components/FloatingCharacter.css";
 import "./Dashboard.css";
 
-const AISLES = [
-  {
-    id: 1,
-    to: "/app/pantry",
-    title: "The Smart Pantry",
-    blurb: "Manage your inventory and track stock levels in real time.",
-    image:
-      "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    id: 2,
-    to: "/app/recipes",
-    title: "Recipe Kitchen",
-    blurb: "Personalised meals ranked by what you already have on hand.",
-    image:
-      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    id: 3,
-    to: "/app/recipes#for-you",
-    title: "Vitality Analytics",
-    blurb: "Close your rings, benchmark peers, and simulate healthier swaps.",
-    image:
-      "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    id: 4,
-    to: "/app/purchases",
-    title: "Checkout & History",
-    blurb: "Review past baskets and how your spend breaks down by health.",
-    image:
-      "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=800&q=80",
-  },
-];
+const PROFILE_GOALS = "/app/profile?tab=account&panel=preferences";
+const PERIODS = [7, 30];
+
+function periodFromSearch(searchParams) {
+  const raw = Number(searchParams.get("days"));
+  return PERIODS.includes(raw) ? raw : 30;
+}
+
+function formatGoalList(goals) {
+  if (!goals?.length) return "";
+  if (goals.length === 1) return goals[0];
+  if (goals.length === 2) return `${goals[0]} and ${goals[1]}`;
+  return `${goals.slice(0, -1).join(", ")}, and ${goals[goals.length - 1]}`;
+}
+
+function buildWins({ spend, pantry, budget, days }) {
+  const wins = [];
+
+  wins.push({
+    id: "healthy",
+    label: "Healthy shopping",
+    value: spend.total > 0 ? `${spend.healthyPct}%` : "—",
+    detail:
+      spend.total > 0
+        ? `${formatCurrency(spend.healthy)} of ${formatCurrency(spend.total)} in the last ${days} days`
+        : `No shops in the last ${days} days yet`,
+  });
+
+  if (pantry.count > 0) {
+    wins.push({
+      id: "pantry",
+      label: "Pantry ready",
+      value: `${pantry.count}`,
+      detail: "items on hand right now",
+    });
+  }
+
+  if (budget && budget.remaining >= 0) {
+    wins.push({
+      id: "budget",
+      label: "On budget",
+      value: formatCurrency(budget.remaining),
+      detail: budget.monthLabel
+        ? `still left · ${budget.monthLabel}`
+        : "still left this month",
+    });
+  }
+
+  return wins.slice(0, 4);
+}
 
 export default function Dashboard() {
   const { customer } = useCustomer();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const days = periodFromSearch(searchParams);
   const [data, setData] = useState(null);
-  const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    api
-      .getDashboard(customer.id, days)
-      .then((res) => {
-        if (alive) setData(res.data);
+    const firstLoad = data == null;
+    if (firstLoad) setLoading(true);
+    else setRefreshing(true);
+    setError("");
+
+    Promise.all([
+      api.getDashboard(customer.id, days),
+      api.getProfile(customer.id).catch(() => null),
+    ])
+      .then(([dashboardRes, profileRes]) => {
+        if (!alive) return;
+        const profileGoals = profileRes?.data?.profile?.health_goals;
+        setData({
+          ...dashboardRes.data,
+          healthGoals: Array.isArray(profileGoals)
+            ? profileGoals.filter((goal) => typeof goal === "string")
+            : dashboardRes.data.healthGoals || [],
+        });
       })
       .catch((err) => {
         if (alive) setError(err.message || "Failed to load dashboard");
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setLoading(false);
+        setRefreshing(false);
       });
+
     return () => {
       alive = false;
     };
+    // Re-fetch when period changes — data intentionally omitted from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer.id, days]);
 
-  const maxTrend = useMemo(() => {
-    if (!data?.spendTrend?.length) return 1;
-    return Math.max(...data.spendTrend.map((d) => d.total), 1);
-  }, [data]);
+  function changePeriod(nextDays) {
+    if (nextDays === days) return;
+    const next = new URLSearchParams(searchParams);
+    if (nextDays === 30) next.delete("days");
+    else next.set("days", String(nextDays));
+    setSearchParams(next, { replace: true });
+  }
 
   if (loading) return <LoadingBlock label="Building your snapshot…" />;
-  if (error) return <div className="error-state panel">{error}</div>;
+  if (error && !data) return <div className="error-state panel">{error}</div>;
   if (!data) return null;
 
-  const { spend, pantry, topRecipes, recentBasket, budget, spendTrend } = data;
+  const { spend, pantry, budget, healthGoals = [] } = data;
   const firstName = customer.name.split(" ")[0];
+  const goals = healthGoals.length ? healthGoals : budget?.healthGoals || [];
+  const wins = buildWins({ spend, pantry, budget, days });
+  const expiredCount = Number(pantry.expiredCount || 0);
+  const soonCount = Number(pantry.expiringSoon || 0);
+  const freshCount = Number(
+    pantry.freshCount ??
+      Math.max(0, (pantry.count || 0) - expiredCount - soonCount)
+  );
 
   return (
-    <div className="dash">
+    <div className={`dash ${refreshing ? "is-refreshing" : ""}`}>
       <div className="dash-hero" aria-hidden="true" />
 
-      <div className="dash-layout">
+      <div className="dash-layout dash-layout-single">
         <div className="dash-main">
+          <section className="bb-home-welcome" aria-label="Meet Leafy">
+            <button
+              type="button"
+              className="bb-home-welcome-trigger"
+              onClick={openLeafyChat}
+              aria-label="Open chat with Leafy"
+            >
+              <div className="bb-char bb-char-home" aria-hidden="true">
+                <img src={LEAF_SRC} alt="" />
+              </div>
+            </button>
+            <div className="bb-home-welcome-copy">
+              <strong>Hi, I&apos;m Leafy — your BiteBetter pantry pal!</strong>
+              <p>
+                I&apos;m here to help you use what you&apos;ve already got, find
+                recipes, and eat a little healthier. Tap me anytime you want to
+                chat 🍃
+              </p>
+            </div>
+          </section>
+
           <section className="dash-hello glass-dark">
             <div>
               <p className="dash-kicker">Dashboard</p>
-              <h1>Hello, {firstName}</h1>
-              <p>
-                Ready for a vitality boost today? Your pantry is{" "}
-                <strong>{pantry.stockedPct}% stocked</strong> with essentials
-                from your recent HealthyFood shopping.
-              </p>
+              <h1>
+                Hi, {firstName}{" "}
+                <span className="dash-wave" aria-hidden="true">
+                  👋
+                </span>
+              </h1>
+              {goals.length > 0 ? (
+                <p className="dash-hello-goal">
+                  Your goal is <strong>{formatGoalList(goals)}</strong>
+                </p>
+              ) : (
+                <p className="dash-hello-goal">
+                  Your goal is not set yet —{" "}
+                  <Link to={PROFILE_GOALS}>set one on your profile</Link>
+                </p>
+              )}
+              <p>Let’s see how you’re doing.</p>
             </div>
-            <div className="dash-period">
-              {[7, 30].map((d) => (
+            <div className="dash-period" role="group" aria-label="Time period">
+              {PERIODS.map((d) => (
                 <button
                   key={d}
                   type="button"
-                  className={days === d ? "is-active" : ""}
-                  onClick={() => setDays(d)}
+                  className={days === d ? "is-active" : undefined}
+                  aria-pressed={days === d}
+                  onClick={() => changePeriod(d)}
                 >
                   {d}d
                 </button>
@@ -108,221 +190,102 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <section className="dash-aisles">
-            {AISLES.map((aisle) => (
-              <Link key={aisle.id} to={aisle.to} className="dash-aisle glass">
-                <span className="dash-aisle-badge">Go</span>
-                <div
-                  className="dash-aisle-image"
-                  style={{ backgroundImage: `url(${aisle.image})` }}
-                />
-                <div className="dash-aisle-body">
-                  <h3>{aisle.title}</h3>
-                  <p>{aisle.blurb}</p>
-                  <span className="dash-aisle-link">
-                    Open <span aria-hidden="true">→</span>
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </section>
+          {error ? <div className="error-state panel">{error}</div> : null}
 
-          <section className="dash-panels">
-            <article className="glass dash-card">
+          <div className="dash-wins-row">
+            <section className="glass dash-card dash-wins" key={`wins-${days}`}>
               <header className="dash-card-head">
-                <h2>Health mix</h2>
+                <h2>Wins so far</h2>
                 <span>Last {days} days</span>
               </header>
-              <div className="dash-mix-bar">
-                <div style={{ width: `${spend.healthyPct}%` }} className="seg healthy" />
-                <div style={{ width: `${spend.neutralPct}%` }} className="seg neutral" />
-                <div style={{ width: `${spend.unhealthyPct}%` }} className="seg unhealthy" />
+              <div className="dash-wins-grid">
+                {wins.map((win) => (
+                  <article key={win.id} className="dash-win">
+                    <span className="dash-win-label">{win.label}</span>
+                    <strong>{win.value}</strong>
+                    <p>{win.detail}</p>
+                  </article>
+                ))}
               </div>
-              <div className="dash-mix-rows">
-                <MixRow label="Healthy" amount={spend.healthy} pct={spend.healthyPct} tone="healthy" />
-                <MixRow label="Neutral" amount={spend.neutral} pct={spend.neutralPct} tone="neutral" />
-                <MixRow label="Unhealthy" amount={spend.unhealthy} pct={spend.unhealthyPct} tone="unhealthy" />
-              </div>
-              <p className="dash-footnote">
-                Total spend {formatCurrency(spend.total)} · classified via
-                HealthyFood categories
-              </p>
-            </article>
-
-            <article className="glass dash-card">
-              <header className="dash-card-head">
-                <h2>Pantry glance</h2>
-                <Link to="/app/pantry">View pantry →</Link>
-              </header>
-              <div className="dash-pantry-stat">
-                <strong>{pantry.count}</strong>
-                <span>items on hand</span>
-              </div>
-              {pantry.expiringItems.length === 0 ? (
-                <p className="dash-empty">Nothing expiring in the next 3 days.</p>
-              ) : (
-                <ul className="dash-expiry-list">
-                  {pantry.expiringItems.map((item) => (
-                    <li key={item.id}>
-                      <div>
-                        <strong>{item.name}</strong>
-                        <small>{item.category}</small>
-                      </div>
-                      <span className="dash-expiry-pill">
-                        {item.daysLeft === 0 ? "Today" : `${item.daysLeft}d left`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          </section>
-
-          <section className="glass dash-card">
-            <header className="dash-card-head">
-              <h2>Recipes for you</h2>
-              <Link to="/app/recipes">All recipes →</Link>
-            </header>
-            <div className="dash-recipes">
-              {topRecipes.map((recipe) => (
-                <Link
-                  key={recipe.id}
-                  to={`/app/recipes/${recipe.id}`}
-                  className="dash-recipe"
-                >
-                  <div className="dash-recipe-top">
-                    <h3>{recipe.name}</h3>
-                    <span>{recipe.matchPercent}%</span>
-                  </div>
-                  <p>
-                    {recipe.matchCount}/{recipe.totalIngredients} ingredients on
-                    hand · {recipe.prepTimeMinutes} min
-                  </p>
-                  <div className="dash-recipe-bar">
-                    <div style={{ width: `${recipe.matchPercent}%` }} />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-
-          {budget && (
-            <section className="glass dash-card dash-budget">
-              <header className="dash-card-head">
-                <h2>Budget & goals</h2>
-                <Link to="/app/profile">Edit →</Link>
-              </header>
-              <div className="dash-budget-grid">
-                <div>
-                  <span className="dash-label">Monthly budget</span>
-                  <strong>{formatCurrency(budget.budgetMonthly)}</strong>
-                </div>
-                <div>
-                  <span className="dash-label">Spent this month</span>
-                  <strong>{formatCurrency(budget.monthSpend)}</strong>
-                </div>
-                <div>
-                  <span className="dash-label">Remaining</span>
-                  <strong className={budget.remaining < 0 ? "is-over" : ""}>
-                    {formatCurrency(budget.remaining)}
-                  </strong>
-                </div>
-              </div>
-              <div className="dash-budget-track">
-                <div style={{ width: `${budget.usedPct}%` }} />
-              </div>
-              <p className="dash-footnote">{budget.usedPct}% of budget used</p>
-              {(budget.dietaryPreferences.length > 0 ||
-                budget.healthGoals.length > 0) && (
-                <div className="dash-chips">
-                  {[...budget.dietaryPreferences, ...budget.healthGoals].map(
-                    (chip) => (
-                      <span key={chip}>{chip}</span>
-                    )
-                  )}
-                </div>
-              )}
             </section>
-          )}
-        </div>
 
-        <aside className="dash-side">
-          <section className="glass dash-card">
-            <header className="dash-card-head">
-              <h2>Spend trends</h2>
-              <span>{days}d</span>
-            </header>
-            <div className="dash-chart">
-              {(spendTrend.length ? spendTrend.slice(-7) : []).map((point) => (
-                <div key={point.date} className="dash-chart-col">
-                  <div className="dash-chart-bar-wrap">
-                    <div
-                      className="dash-chart-bar"
-                      style={{ height: `${Math.max(8, (point.total / maxTrend) * 100)}%` }}
-                      title={formatCurrency(point.total)}
-                    />
-                  </div>
-                  <span>{point.label}</span>
+            <div className="dash-status-stack">
+              <Link
+                to="/app/pantry?focus=expired"
+                className="dash-status-card is-expired"
+                title="View expired foods in pantry"
+              >
+                <span className="dash-status-label">Expired</span>
+                <strong className="dash-status-count">{expiredCount}</strong>
+              </Link>
+              <Link
+                to="/app/pantry?focus=soon"
+                className="dash-status-card is-soon"
+                title="View foods expiring within 60 days"
+              >
+                <span className="dash-status-label">Expiring</span>
+                <strong className="dash-status-count">{soonCount}</strong>
+              </Link>
+              <Link
+                to="/app/pantry?focus=fresh"
+                className="dash-status-card is-fresh"
+                title="View remaining pantry items"
+              >
+                <span className="dash-status-label">Fresh</span>
+                <strong className="dash-status-count">{freshCount}</strong>
+              </Link>
+            </div>
+          </div>
+
+          <section className="dash-panels">
+            <article
+              className="glass dash-card dash-spend-compact"
+              key={`spend-${days}`}
+            >
+              <header className="dash-card-head">
+                <h2>Healthy spend</h2>
+                <span>Last {days} days</span>
+              </header>
+              <div className="dash-spend-compact-body">
+                <strong className="dash-spend-pct">{spend.healthyPct}%</strong>
+                <div className="dash-mix-bar">
+                  <div
+                    style={{ width: `${spend.healthyPct}%` }}
+                    className="seg healthy"
+                  />
+                  <div
+                    style={{ width: `${spend.neutralPct}%` }}
+                    className="seg neutral"
+                  />
+                  <div
+                    style={{ width: `${spend.unhealthyPct}%` }}
+                    className="seg unhealthy"
+                  />
                 </div>
-              ))}
-              {spendTrend.length === 0 && (
-                <p className="dash-empty">No spend in this period.</p>
-              )}
-            </div>
-            <div className="dash-weekly-total">
-              <span>Period total</span>
-              <strong>{formatCurrency(spend.total)}</strong>
-            </div>
-          </section>
-
-          <section className="glass dash-card">
-            <header className="dash-card-head">
-              <h2>Your basket</h2>
-              {recentBasket && (
-                <span className="dash-count">{recentBasket.itemCount}</span>
-              )}
-            </header>
-            {!recentBasket ? (
-              <p className="dash-empty">No recent baskets in this window.</p>
-            ) : (
-              <>
-                <p className="dash-basket-meta">
-                  {recentBasket.retailer} · {formatDate(recentBasket.purchaseDate)}
-                </p>
-                <ul className="dash-basket-list">
-                  {recentBasket.items.map((item) => (
-                    <li key={item.id}>
-                      <span className={`dash-dot ${item.healthTag}`} />
-                      <div>
-                        <strong>{item.name}</strong>
-                        <small>
-                          qty {item.quantity}
-                          {item.category ? ` · ${item.category}` : ""}
-                        </small>
-                      </div>
-                    </li>
-                  ))}
+                <ul className="dash-spend-key" aria-label="Spend key">
+                  <li>
+                    <span className="dash-key-swatch healthy" aria-hidden="true" />
+                    Healthy {spend.healthyPct}%
+                  </li>
+                  <li>
+                    <span className="dash-key-swatch neutral" aria-hidden="true" />
+                    Neutral {spend.neutralPct}%
+                  </li>
+                  <li>
+                    <span className="dash-key-swatch unhealthy" aria-hidden="true" />
+                    Less healthy {spend.unhealthyPct}%
+                  </li>
                 </ul>
-                <Link to="/app/purchases" className="dash-checkout">
-                  Go to history
-                </Link>
-              </>
-            )}
+                <p className="dash-footnote">
+                  {formatCurrency(spend.healthy)} of{" "}
+                  {formatCurrency(spend.total)} was healthy
+                </p>
+              </div>
+            </article>
           </section>
-        </aside>
+        </div>
       </div>
     </div>
   );
 }
 
-function MixRow({ label, amount, pct, tone }) {
-  return (
-    <div className="dash-mix-row">
-      <div>
-        <span className={`tag tag-${tone}`}>{label}</span>
-        <span className="dash-mix-pct">{pct}%</span>
-      </div>
-      <strong>{formatCurrency(amount)}</strong>
-    </div>
-  );
-}

@@ -136,23 +136,22 @@ async function getBudgetContext(customerId) {
     profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
   if (budgetMonthly == null || Number.isNaN(budgetMonthly)) return null;
 
-  const datasetEnd = await getDatasetEndDate();
-  const monthStart = new Date(datasetEnd);
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
+  const datasetEnd = await getDatasetEndDate(customerId);
+  const { spendStatsForWindow, windowStartFor } = require("../utils/budgetMonth");
+  const windowStart = windowStartFor(datasetEnd);
 
   const { data: baskets } = await supabase
     .from("baskets")
-    .select("basket_items ( line_total, unit_price )")
+    .select("purchase_date, retailers ( name ), basket_items ( line_total, unit_price )")
     .eq("customer_id", customerId)
-    .gte("purchase_date", monthStart.toISOString());
+    .gte("purchase_date", windowStart.toISOString());
 
-  let monthSpend = 0;
+  const monthSpend = spendStatsForWindow(baskets, windowStart, datasetEnd).monthSpend;
+
   let priceSum = 0;
   let priceCount = 0;
   for (const basket of baskets || []) {
     for (const item of basket.basket_items || []) {
-      monthSpend += Number(item.line_total || 0);
       if (item.unit_price != null) {
         priceSum += Number(item.unit_price);
         priceCount += 1;
@@ -273,10 +272,21 @@ router.post("/:customerId/:recommendationId/action", async (req, res) => {
         .json({ success: false, message: "action must be accepted or dismissed" });
     }
 
+    const { data: recommendation } = await supabase
+      .from("recommendations")
+      .select("id, recipe_id, product_id")
+      .eq("id", recommendationId)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+
     const { error } = await supabase.from("activity_log").insert({
       customer_id: customerId,
       event_type: `recommendation_${action}`,
-      metadata: { recommendation_id: Number(recommendationId) },
+      metadata: {
+        recommendation_id: Number(recommendationId),
+        recipe_id: recommendation?.recipe_id ?? null,
+        product_id: recommendation?.product_id ?? null,
+      },
     });
 
     if (error) throw error;

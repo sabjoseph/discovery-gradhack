@@ -1,5 +1,6 @@
 const express = require("express");
 const supabase = require("../config/supabase");
+const { inferProfileEstimates } = require("../utils/profileEstimates");
 const { extractVouchers, withVouchers } = require("../utils/vouchers");
 const {
   extractAllergies,
@@ -139,6 +140,17 @@ router.get("/:customerId", async (req, res) => {
     const weight = split.weight_kg;
     const height = split.height_cm;
 
+    // Only customers who have never saved a profile get inferred starting values —
+    // an existing row is the customer's own answer and is never second-guessed.
+    let estimates = null;
+    if (!profile) {
+      try {
+        estimates = await inferProfileEstimates(customerId);
+      } catch (estimateError) {
+        console.error("Profile estimate failed", estimateError);
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -166,6 +178,7 @@ router.get("/:customerId", async (req, res) => {
           dietary_preferences: DIETARY_PREFERENCE_LABELS,
           allergies: ALLERGEN_LABELS,
         },
+        estimates,
       },
     });
   } catch (err) {
