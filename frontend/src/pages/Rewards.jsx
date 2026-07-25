@@ -72,12 +72,15 @@ export default function Rewards() {
   const [issuedVoucher, setIssuedVoucher] = useState(null);
 
   const load = useCallback(async () => {
-    const [milestonesRes, rewardsRes] = await Promise.all([
-      api.getMilestones(customer.id),
-      api.getRewards(customer.id),
-    ]);
+    // Milestones first so newly earned points (e.g. 3 recipes) are written
+    // before the rewards balance is calculated.
+    const milestonesRes = await api.getMilestones(customer.id);
+    const rewardsRes = await api.getRewards(customer.id);
     setData(milestonesRes.data);
     setRewards(rewardsRes.data);
+    if (rewardsRes.data?.issuedVoucher) {
+      setIssuedVoucher(rewardsRes.data.issuedVoucher);
+    }
   }, [customer.id]);
 
   useEffect(() => {
@@ -102,23 +105,18 @@ export default function Rewards() {
       const res = await api.redeemReward(customer.id, rewardId);
       setRewards((prev) => ({
         ...prev,
-        catalog: (prev?.catalog || []).map((r) => ({
-          ...r,
-          alreadyOwned:
-            r.id === res.data.voucher.rewardId
-              ? true
-              : (res.data.vouchers || []).some((v) => v.rewardId === r.id),
-          canAfford:
-            r.id === res.data.voucher.rewardId
-              ? false
-              : res.data.pointsBalance >= r.points && !r.locked,
-        })),
+        catalog: res.data.catalog || prev?.catalog || [],
         pointsEarned: res.data.pointsEarned,
         pointsSpent: res.data.pointsSpent,
         pointsBalance: res.data.pointsBalance,
         vouchers: res.data.vouchers,
+        healthyFoods: res.data.healthyFoods ?? prev?.healthyFoods,
+        cookeryUnlocked: res.data.cookeryUnlocked ?? prev?.cookeryUnlocked,
       }));
       setIssuedVoucher(res.data.voucher);
+      // Refresh milestones so The Cookery moves to Achieved.
+      const milestonesRes = await api.getMilestones(customer.id);
+      setData(milestonesRes.data);
     } catch (err) {
       setRedeemError(
         err.response?.data?.message || err.message || "Redeem failed"
@@ -146,15 +144,16 @@ export default function Rewards() {
   const sortedCatalog = catalog
     .map((reward, index) => ({ reward, index }))
     .sort((a, b) => {
-      const rank = ({ reward }) => {
-        if (reward.canAfford && Number(reward.points) === 0) return 0;
+      const rank = (reward) => {
+        // The Cookery is pinned to the top whatever its state.
+        if (reward.unlockCriteria === "healthy_foods") return 0;
         if (reward.canAfford) return 1;
         if (!reward.alreadyOwned && !reward.locked) return 2;
         if (reward.locked) return 3;
         return 4;
       };
       return (
-        rank(a) - rank(b) ||
+        rank(a.reward) - rank(b.reward) ||
         Number(a.reward.points) - Number(b.reward.points) ||
         a.index - b.index
       );
@@ -178,9 +177,8 @@ export default function Rewards() {
             <p className="rw-kicker">Rewards</p>
             <h1>Milestones</h1>
             <p>
-              Habit goals tracked from your shopping, pantry, and activity —
-              unlock points, then redeem them for vouchers saved to your
-              profile.
+              Hit habit goals as you shop and cook — unlock points, then redeem
+              them for vouchers.
             </p>
           </div>
           <div className="rw-header-stats">
@@ -226,7 +224,9 @@ export default function Rewards() {
               </div>
               <div>
                 <span>Healthy foods</span>
-                <strong>{stats.healthyFoods ?? 0}</strong>
+                <strong>
+                  {rewards?.healthyFoods ?? stats.healthyFoods ?? 0}
+                </strong>
               </div>
               <div>
                 <span>Login streak</span>
@@ -252,7 +252,7 @@ export default function Rewards() {
               </h2>
               <p>
                 {vouchers.length
-                  ? `${vouchers.length} saved to your profile`
+                  ? `${vouchers.length} ready to use`
                   : "Claim rewards to collect voucher codes here"}
               </p>
             </div>
@@ -291,8 +291,7 @@ export default function Rewards() {
               <div className="rw-section-head">
                 <h2>In progress</h2>
                 <p>
-                  Keep going — progress updates from your real baskets and
-                  activity.
+                  Keep going — your progress updates as you shop and cook.
                 </p>
               </div>
               {inProgress.length === 0 ? (
@@ -314,8 +313,8 @@ export default function Rewards() {
               <div className="rw-section-head">
                 <h2>Achieved</h2>
                 <p>
-                  Milestone points feed your balance — redeem them in the
-                  sidebar for vouchers.
+                  Points from these goals are ready to spend — redeem them for
+                  vouchers on the right.
                 </p>
               </div>
               {completed.length === 0 ? (
@@ -341,7 +340,7 @@ export default function Rewards() {
               <p>
                 Balance <strong>{pointsBalance}</strong>
                 {pointsSpent > 0 ? ` · ${pointsSpent} spent` : ""}
-                {pointsAvailable > 0 ? ` · ${pointsAvailable} max from goals` : ""}
+                {pointsAvailable > 0 ? ` · ${pointsAvailable} available from goals` : ""}
               </p>
               <button
                 type="button"
@@ -355,30 +354,35 @@ export default function Rewards() {
             <div className="rw-side-scroll">
               <div className="rw-reward-stack">
                 {sortedCatalog.map((reward) => {
-                  const canAfford = reward.canAfford;
+                  const canAfford = Boolean(reward.canAfford);
                   const busy = redeemingId === reward.id;
-                  const locked = reward.locked;
-                  const owned = reward.alreadyOwned;
+                  const locked = Boolean(reward.locked);
+                  const owned = Boolean(reward.alreadyOwned);
+                  const isCookery = reward.unlockCriteria === "healthy_foods";
                   const healthyFoods = Math.min(
                     10,
-                    Number(stats.healthyFoods ?? 0)
+                    Number(
+                      reward.progress?.current ??
+                        rewards?.healthyFoods ??
+                        stats.healthyFoods ??
+                        0
+                    )
                   );
-                  const isCookery = reward.unlockCriteria === "healthy_foods";
                   let buttonLabel = `Need ${reward.points} pts`;
                   if (owned) buttonLabel = "Already claimed";
-                  else if (isCookery && (locked || !canAfford))
-                    buttonLabel = `${healthyFoods}/10 healthy foods`;
                   else if (busy) buttonLabel = "Claiming…";
-                  else if (canAfford && reward.points === 0)
-                    buttonLabel = "Claim voucher";
+                  else if (isCookery && locked)
+                    buttonLabel = `${healthyFoods}/10 healthy foods`;
                   else if (canAfford) buttonLabel = "Claim voucher";
+                  else if (isCookery)
+                    buttonLabel = `${healthyFoods}/10 healthy foods`;
 
                   return (
                     <article
                       key={reward.id}
                       className={`rw-reward-item ${canAfford ? "is-affordable" : ""} ${locked ? "is-locked" : ""} ${owned ? "is-owned" : ""}`}
                     >
-                      <div>
+                      <div className="rw-reward-copy">
                         <h3>
                           {owned ? (
                             <Link to={PROFILE_REWARDS} className="rw-inline-link">
@@ -399,7 +403,7 @@ export default function Rewards() {
                         ) : (
                           <button
                             type="button"
-                            className="btn btn-sm rw-redeem-btn"
+                            className="btn btn-sm btn-primary rw-redeem-btn"
                             disabled={!canAfford || Boolean(redeemingId)}
                             onClick={() => onRedeem(reward.id)}
                           >
@@ -495,8 +499,7 @@ export default function Rewards() {
               </button>
             </div>
             <p className="rw-modal-lead">
-              {issuedVoucher.name} is saved to your profile. Show this code at
-              checkout.
+              {issuedVoucher.name} is yours. Show this code at checkout.
             </p>
             <div className="rw-voucher-code">
               <span>Code</span>

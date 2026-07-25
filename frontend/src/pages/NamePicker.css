@@ -34,18 +34,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 8px 20px rgba(0, 27, 68, 0.1);
   flex-shrink: 0;
 }
 
 .np-logo-badge img {
-  width: 34px;
-  height: 34px;
+  width: 96px;
+  height: 96px;
   object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 6px 16px rgba(0, 27, 68, 0.12));
 }
 
 .np-title {
@@ -113,7 +110,7 @@
 .np-card-brand {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 1.15rem;
 }
 
 .np-card-header h2 {
@@ -321,15 +318,74 @@
   padding-left: 0.9rem;
 }
 
-.np-mascot {
+.np-leafy {
   position: fixed;
-  left: clamp(0.75rem, 2vw, 1.5rem);
-  bottom: clamp(0.75rem, 2vw, 1.5rem);
-  width: clamp(88px, 12vw, 140px);
-  height: auto;
+  left: 0;
+  bottom: 0;
   z-index: 5;
   pointer-events: none;
   user-select: none;
+  width: min(360px, 58vw);
+  height: min(360px, 46vh);
+  overflow: hidden;
+}
+
+.np-leafy-char {
+  position: absolute;
+  left: -22%;
+  bottom: -14%;
+  width: min(300px, 82vw);
+  height: auto;
+  display: block;
+  transform-origin: center bottom;
+  animation: npLeafBob 4s ease-in-out infinite;
+  filter: drop-shadow(0 10px 28px rgba(0, 27, 68, 0.22));
+}
+
+.np-leafy-bubble {
+  position: absolute;
+  left: clamp(5.5rem, 24vw, 10.5rem);
+  bottom: clamp(7.5rem, 20vh, 11.5rem);
+  z-index: 1;
+  max-width: min(17rem, 44vw);
+  margin: 0;
+  padding: 0.8rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(123, 188, 67, 0.38);
+  color: var(--secondary);
+  font-size: clamp(0.82rem, 1.7vw, 0.96rem);
+  font-weight: 700;
+  line-height: 1.45;
+  box-shadow:
+    0 14px 36px rgba(0, 27, 68, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.np-leafy-bubble::after {
+  content: "";
+  position: absolute;
+  left: 16%;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  border-right: 1px solid rgba(123, 188, 67, 0.38);
+  border-bottom: 1px solid rgba(123, 188, 67, 0.38);
+  transform: rotate(45deg);
+  box-shadow: 4px 4px 10px rgba(0, 27, 68, 0.08);
+}
+
+@keyframes npLeafBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
 }
 
 .np-footer {
@@ -380,9 +436,9 @@
     max-width: none;
   }
 
-  .np-logo-badge {
-    margin-left: auto;
-    margin-right: auto;
+  .np-logo-badge img {
+    width: 84px;
+    height: 84px;
   }
 
   .np-lead {
@@ -406,5 +462,23 @@
   .np-footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .np-leafy {
+    width: min(280px, 72vw);
+    height: min(280px, 38vh);
+  }
+
+  .np-leafy-char {
+    width: min(250px, 88vw);
+    left: -26%;
+    bottom: -16%;
+  }
+
+  .np-leafy-bubble {
+    left: clamp(4.5rem, 18vw, 7rem);
+    bottom: clamp(6rem, 16vh, 8.5rem);
+    max-width: min(14rem, 58vw);
+    font-size: 0.8rem;
   }
 }

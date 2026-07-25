@@ -146,8 +146,8 @@ export default function Analytics() {
           <p className="an-kicker">Vitality Analytics</p>
           <h1>Close your rings. Find the spend that hurts. Swap smarter.</h1>
           <p>
-            Goals, peer benchmarks, and healthier swaps — built from your real
-            HealthyFood baskets. Dashboard is today; this page is the plan.
+            Goals, how you compare with other shoppers, and healthier swaps —
+            your plan for spending smarter.
           </p>
         </div>
         <div className="an-period">
@@ -357,7 +357,7 @@ export default function Analytics() {
             <div>
               <h2>Peer benchmark</h2>
               <p>
-                Healthy-spend % vs {peers.customerCount} HealthyFood shoppers.
+                Healthy-spend % vs {peers.customerCount} other shoppers.
               </p>
             </div>
             <ProgressRing

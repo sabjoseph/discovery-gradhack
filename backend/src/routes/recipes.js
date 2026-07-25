@@ -20,6 +20,20 @@ async function getPantryCategoryIds(customerId) {
   return ids;
 }
 
+function mapNutrition(recipe) {
+  return {
+    calories: recipe.calories_per_serving,
+    protein: recipe.protein_g_per_serving,
+    carbohydrates: recipe.carbohydrates_g_per_serving,
+    sugar: recipe.sugar_g_per_serving,
+    totalFat: recipe.fat_g_per_serving,
+    saturatedFat: recipe.saturated_fat_g_per_serving,
+    fibre: recipe.fibre_g_per_serving,
+    sodium: recipe.sodium_mg_per_serving,
+    sodiumUnit: "mg",
+  };
+}
+
 function scoreRecipe(recipe, pantryCats) {
   const ingredients = recipe.recipe_ingredients || [];
   const total = ingredients.length || 1;
@@ -71,6 +85,14 @@ router.get("/", async (req, res) => {
         health_score,
         source,
         servings,
+        calories_per_serving,
+        protein_g_per_serving,
+        carbohydrates_g_per_serving,
+        sugar_g_per_serving,
+        fat_g_per_serving,
+        saturated_fat_g_per_serving,
+        fibre_g_per_serving,
+        sodium_mg_per_serving,
         recipe_ingredients (
           id,
           ingredient_name,
@@ -115,6 +137,7 @@ router.get("/", async (req, res) => {
         servings: recipe.servings,
         ingredientCount: recipe.recipe_ingredients?.length || 0,
         categories,
+        nutrition: mapNutrition(recipe),
         ...score,
       };
     });
@@ -122,6 +145,32 @@ router.get("/", async (req, res) => {
     mapped.sort((a, b) => b.matchPercent - a.matchPercent || b.matchCount - a.matchCount);
 
     res.json({ success: true, data: mapped });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/** Log a recipe added to the meal plan (counts toward Try 3 new recipes). */
+router.post("/tried", async (req, res) => {
+  try {
+    const customerId = req.body?.customerId;
+    const recipeId = req.body?.recipeId;
+    if (!customerId || recipeId == null) {
+      return res.status(400).json({
+        success: false,
+        message: "customerId and recipeId are required",
+      });
+    }
+
+    const { error } = await supabase.from("activity_log").insert({
+      customer_id: customerId,
+      event_type: "recipe_tried",
+      metadata: { recipe_id: Number(recipeId) || recipeId },
+    });
+
+    if (error) throw error;
+
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -141,6 +190,14 @@ router.get("/:id", async (req, res) => {
         health_score,
         source,
         servings,
+        calories_per_serving,
+        protein_g_per_serving,
+        carbohydrates_g_per_serving,
+        sugar_g_per_serving,
+        fat_g_per_serving,
+        saturated_fat_g_per_serving,
+        fibre_g_per_serving,
+        sodium_mg_per_serving,
         recipe_ingredients (
           id,
           ingredient_name,
@@ -174,6 +231,7 @@ router.get("/:id", async (req, res) => {
         healthScore: recipe.health_score,
         source: recipe.source,
         servings: recipe.servings,
+        nutrition: mapNutrition(recipe),
         ingredients: (recipe.recipe_ingredients || []).map((ing) => ({
           id: ing.id,
           name: ing.ingredient_name,

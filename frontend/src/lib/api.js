@@ -55,6 +55,8 @@ export const api = {
     get("/api/recipes", customerId ? { customerId } : undefined),
   getRecipe: (id, customerId) =>
     get(`/api/recipes/${id}`, customerId ? { customerId } : undefined),
+  logRecipeTried: (customerId, recipeId) =>
+    post("/api/recipes/tried", { customerId, recipeId }),
   getRecommendations: (customerId) =>
     get(`/api/recommendations/${customerId}`),
   actOnRecommendation: (customerId, recommendationId, action) =>

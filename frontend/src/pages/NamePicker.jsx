@@ -7,6 +7,10 @@ import "./NamePicker.css";
 
 const DEBOUNCE_MS = 300;
 
+function hasValidName(name) {
+  return typeof name === "string" && /\p{L}/u.test(name);
+}
+
 export default function NamePicker() {
   const [mode, setMode] = useState("search"); // search | signup
   const [query, setQuery] = useState("");
@@ -64,9 +68,12 @@ export default function NamePicker() {
         setError(queryError.message || "Could not load customers.");
         setCustomers([]);
       } else {
-        setCustomers(data || []);
+        const validCustomers = (data || []).filter((person) =>
+          hasValidName(person.name)
+        );
+        setCustomers(validCustomers);
         setSelected((prev) =>
-          prev && (data || []).some((c) => c.id === prev.id) ? prev : null
+          prev && validCustomers.some((c) => c.id === prev.id) ? prev : null
         );
       }
 
@@ -132,6 +139,10 @@ export default function NamePicker() {
       setError("Enter your first name and surname.");
       return;
     }
+    if (!hasValidName(first) || !hasValidName(last)) {
+      setError("Please enter a valid first name and surname.");
+      return;
+    }
 
     setCreating(true);
     setError("");
@@ -166,7 +177,7 @@ export default function NamePicker() {
           <header className="np-card-header">
             <div className="np-card-brand">
               <div className="np-logo-badge">
-                <img src="/BiteBetter Logo.png" alt="BiteBetter" />
+                <img src="/assets/bitebetter-icon.png" alt="BiteBetter" />
               </div>
               <div>
                 <h2>
@@ -338,11 +349,17 @@ export default function NamePicker() {
         </section>
       </div>
 
-      <img
-        className="np-mascot"
-        src="/leaf-mascot.png"
-        alt="BiteBetter mascot"
-      />
+      <aside className="np-leafy" aria-label="Leafy welcome">
+        <p className="np-leafy-bubble">
+          Hi, I&apos;m Leafy! Find your name below and I&apos;ll show you
+          what&apos;s in your kitchen 🍃
+        </p>
+        <img
+          className="np-leafy-char"
+          src="/assets/bitebetter-leaf.png"
+          alt=""
+        />
+      </aside>
 
       <footer className="np-footer">
         <div className="np-footer-left">
