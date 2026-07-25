@@ -24,7 +24,7 @@ const AISLES = [
   },
   {
     id: 3,
-    to: "/app/analytics",
+    to: "/app/recipes#for-you",
     title: "Vitality Analytics",
     blurb: "Close your rings, benchmark peers, and simulate healthier swaps.",
     image:

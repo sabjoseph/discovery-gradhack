@@ -7,7 +7,6 @@ const links = [
   { to: "/app", label: "Home", end: true },
   { to: "/app/pantry", label: "Pantry" },
   { to: "/app/recipes", label: "Recipes" },
-  { to: "/app/recommendations", label: "For you" },
   { to: "/app/purchases", label: "Purchases" },
   { to: "/app/rewards", label: "Rewards" },
   { to: "/app/analytics", label: "Analytics" },
