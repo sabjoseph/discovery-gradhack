@@ -1,10 +1,19 @@
-const supabase = require("../supabase");
+const supabase = require("../config/supabase");
+
+function classifyFromLabel(classification, mainCategoryFallback) {
+  const label = (classification || "").toLowerCase();
+  if (label === "healthy") return "healthy";
+  if (label === "neutral") return "neutral";
+  if (label === "unhealthy") return "unhealthy";
+
+  if (!mainCategoryFallback) return "neutral";
+  if (mainCategoryFallback === "Unhealthy foods") return "unhealthy";
+  if (mainCategoryFallback === "Dairy") return "neutral";
+  return "healthy";
+}
 
 function classifyCategory(mainCategory) {
-  if (!mainCategory) return "neutral";
-  if (mainCategory === "Unhealthy foods") return "unhealthy";
-  if (mainCategory === "Dairy") return "neutral";
-  return "healthy";
+  return classifyFromLabel(null, mainCategory);
 }
 
 let cachedDatasetEnd = null;
@@ -42,6 +51,7 @@ async function daysUntil(dateStr) {
 
 module.exports = {
   classifyCategory,
+  classifyFromLabel,
   daysAgo,
   daysUntil,
   daysUntilFrom,

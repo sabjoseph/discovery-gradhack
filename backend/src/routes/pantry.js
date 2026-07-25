@@ -1,5 +1,5 @@
 const express = require("express");
-const supabase = require("../supabase");
+const supabase = require("../config/supabase");
 const { classifyCategory, daysUntilFrom, getDatasetEndDate } = require("../utils/health");
 
 const router = express.Router();
@@ -41,7 +41,7 @@ router.get("/:customerId", async (req, res) => {
         addedDate: row.added_date,
         expiryEstimate: row.expiry_estimate,
         daysLeft,
-        expiringSoon: daysLeft !== null && daysLeft <= 7,
+        expiringSoon: daysLeft !== null && daysLeft >= 0 && daysLeft <= 3,
         expired: daysLeft !== null && daysLeft < 0,
         category: row.products?.categories?.subcategory || "Uncategorised",
         mainCategory: row.products?.categories?.main_category || null,
