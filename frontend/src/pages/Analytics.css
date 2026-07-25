@@ -269,6 +269,11 @@
   font-size: 0.58rem;
 }
 
+.an-goal-ring.is-labelled .progress-ring-centre strong {
+  font-size: 0.78rem;
+  letter-spacing: -0.02em;
+}
+
 .an-card {
   padding: 1.25rem 1.35rem;
 }
