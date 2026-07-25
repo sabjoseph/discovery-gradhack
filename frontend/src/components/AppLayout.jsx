@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
-import { initials } from "../lib/api";
+import { api, initials } from "../lib/api";
 
 const links = [
   { to: "/app", label: "Home", end: true },
@@ -13,11 +13,38 @@ const links = [
   { to: "/app/analytics", label: "Analytics" },
 ];
 
+function AvatarFace({ name, avatarUrl, className = "avatar" }) {
+  if (avatarUrl) {
+    return (
+      <span className={`${className} has-photo`}>
+        <img src={avatarUrl} alt="" />
+      </span>
+    );
+  }
+  return <span className={className}>{initials(name)}</span>;
+}
+
 export default function AppLayout() {
-  const { customer, clearCustomer } = useCustomer();
+  const { customer, setCustomer, clearCustomer } = useCustomer();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!customer?.id || customer.avatarUrl) return undefined;
+    let alive = true;
+    api
+      .getProfile(customer.id)
+      .then((res) => {
+        if (!alive) return;
+        const avatarUrl = res.data?.profile?.avatar_url || null;
+        if (avatarUrl) setCustomer({ ...customer, avatarUrl });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [customer?.id]);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -81,19 +108,23 @@ export default function AppLayout() {
           <div className="user-menu" ref={menuRef}>
             <button
               type="button"
-              className={`avatar avatar-btn${menuOpen ? " is-open" : ""}`}
+              className={`avatar-btn${menuOpen ? " is-open" : ""}`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-label="Account menu"
               onClick={() => setMenuOpen((open) => !open)}
             >
-              {initials(customer?.name)}
+              <AvatarFace name={customer?.name} avatarUrl={customer?.avatarUrl} />
             </button>
 
             {menuOpen && (
               <div className="user-dropdown" role="menu">
                 <div className="user-dropdown-head">
-                  <div className="avatar avatar-sm">{initials(customer?.name)}</div>
+                  <AvatarFace
+                    name={customer?.name}
+                    avatarUrl={customer?.avatarUrl}
+                    className="avatar avatar-sm"
+                  />
                   <div>
                     <strong>{customer?.name}</strong>
                     <span>Signed in</span>
