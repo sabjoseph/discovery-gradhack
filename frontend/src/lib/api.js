@@ -25,11 +25,15 @@ async function put(path, body) {
 export const api = {
   getCustomers: (q) => get("/api/customers", q ? { q } : undefined),
   getCustomer: (id) => get(`/api/customers/${id}`),
+  createCustomer: (firstName, surname) =>
+    post("/api/customers", { firstName, surname }),
   getDashboard: (customerId, days = 30) =>
     get(`/api/dashboard/${customerId}`, { days }),
   getPurchases: (customerId, params) =>
     get(`/api/purchases/${customerId}`, params),
   getPurchasesMeta: (customerId) => get(`/api/purchases/${customerId}/meta`),
+  getPurchasesSummary: (customerId) =>
+    get(`/api/purchases/${customerId}/summary`),
   getPurchaseBasket: (customerId, basketId) =>
     get(`/api/purchases/${customerId}/${basketId}`),
   getPantry: (customerId) => get(`/api/pantry/${customerId}`),
@@ -39,6 +43,8 @@ export const api = {
     get("/api/recipes", customerId ? { customerId } : undefined),
   getRecipe: (id, customerId) =>
     get(`/api/recipes/${id}`, customerId ? { customerId } : undefined),
+  logRecipeTried: (customerId, recipeId) =>
+    post("/api/recipes/tried", { customerId, recipeId }),
   getRecommendations: (customerId) =>
     get(`/api/recommendations/${customerId}`),
   actOnRecommendation: (customerId, recommendationId, action) =>
@@ -46,12 +52,26 @@ export const api = {
       action,
     }),
   getMilestones: (customerId) => get(`/api/milestones/${customerId}`),
+  getRewards: (customerId) => get(`/api/rewards/${customerId}`),
+  redeemReward: (customerId, rewardId) =>
+    post(`/api/rewards/${customerId}/redeem`, { rewardId }),
   getProfile: (customerId) => get(`/api/profile/${customerId}`),
   updateProfile: (customerId, body) => put(`/api/profile/${customerId}`, body),
   getAnalytics: (customerId, days = 90) =>
     get(`/api/analytics/${customerId}`, { days }),
   acceptAnalyticsSwap: (customerId, swap) =>
     post(`/api/analytics/${customerId}/swaps/accept`, swap),
+  chatAssistant: async (body) => {
+    try {
+      const { data } = await client.post("/api/chat-assistant", body, {
+        timeout: 60000,
+      });
+      return data;
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      throw new Error(message);
+    }
+  },
 };
 
 export function formatCurrency(value) {

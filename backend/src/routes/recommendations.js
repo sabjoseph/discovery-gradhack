@@ -207,10 +207,21 @@ router.post("/:customerId/:recommendationId/action", async (req, res) => {
         .json({ success: false, message: "action must be accepted or dismissed" });
     }
 
+    const { data: recommendation } = await supabase
+      .from("recommendations")
+      .select("id, recipe_id, product_id")
+      .eq("id", recommendationId)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+
     const { error } = await supabase.from("activity_log").insert({
       customer_id: customerId,
       event_type: `recommendation_${action}`,
-      metadata: { recommendation_id: Number(recommendationId) },
+      metadata: {
+        recommendation_id: Number(recommendationId),
+        recipe_id: recommendation?.recipe_id ?? null,
+        product_id: recommendation?.product_id ?? null,
+      },
     });
 
     if (error) throw error;

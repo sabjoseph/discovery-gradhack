@@ -41,6 +41,23 @@ export function ShoppingListProvider({ children }) {
       },
       removeItem: (key) => setItems((prev) => prev.filter((row) => row.key !== key)),
       clear: () => setItems([]),
+      pruneClearedRecipes: (
+        clearedRecipeNames = [],
+        remainingRecipeNames = [],
+        neededKeys = []
+      ) => {
+        const cleared = new Set(clearedRecipeNames);
+        const remaining = new Set(remainingRecipeNames);
+        const keys = new Set(neededKeys);
+        setItems((prev) =>
+          prev.filter((item) => {
+            if (keys.has(item.key)) return true;
+            if (remaining.has(item.recipeName)) return true;
+            if (cleared.has(item.recipeName)) return false;
+            return true;
+          })
+        );
+      },
     }),
     [items]
   );

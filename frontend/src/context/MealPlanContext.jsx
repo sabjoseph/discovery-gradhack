@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useCustomer } from "./CustomerContext";
+import { api } from "../lib/api";
 
 export const DAYS = [
   "Monday",
@@ -69,6 +70,10 @@ export function MealPlanProvider({ children }) {
               : null,
           },
         }));
+        // Count toward "Try 3 new recipes" (deduped by recipe_id server-side).
+        if (customerId && recipe?.id != null) {
+          api.logRecipeTried(customerId, recipe.id).catch(() => {});
+        }
       },
       clearSlot: (day, meal) => {
         setPlan((prev) => ({
@@ -76,9 +81,15 @@ export function MealPlanProvider({ children }) {
           [day]: { ...prev[day], [meal]: null },
         }));
       },
+      clearDay: (day) => {
+        setPlan((prev) => ({
+          ...prev,
+          [day]: Object.fromEntries(MEALS.map((meal) => [meal, null])),
+        }));
+      },
       clearWeek: () => setPlan(emptyWeek()),
     }),
-    [plan]
+    [plan, customerId]
   );
 
   return (

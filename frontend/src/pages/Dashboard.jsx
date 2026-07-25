@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { api, formatCurrency, formatDate } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
+import { LEAF_SRC, openLeafyChat } from "../components/FloatingCharacter";
+import "../components/FloatingCharacter.css";
 import "./Dashboard.css";
 
 const AISLES = [
@@ -10,7 +12,7 @@ const AISLES = [
     id: 1,
     to: "/app/pantry",
     title: "The Smart Pantry",
-    blurb: "Manage your inventory and track stock levels in real time.",
+    blurb: "See what’s in your kitchen and what’s running low.",
     image:
       "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80",
   },
@@ -24,9 +26,9 @@ const AISLES = [
   },
   {
     id: 3,
-    to: "/app/analytics",
+    to: "/app/recipes#for-you",
     title: "Vitality Analytics",
-    blurb: "Close your rings, benchmark peers, and simulate healthier swaps.",
+    blurb: "Close your rings, see how you compare, and try healthier swaps.",
     image:
       "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80",
   },
@@ -34,7 +36,7 @@ const AISLES = [
     id: 4,
     to: "/app/purchases",
     title: "Checkout & History",
-    blurb: "Review past baskets and how your spend breaks down by health.",
+    blurb: "Look back on your shops and how healthy your spend was.",
     image:
       "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=800&q=80",
   },
@@ -84,6 +86,27 @@ export default function Dashboard() {
 
       <div className="dash-layout">
         <div className="dash-main">
+          <section className="bb-home-welcome" aria-label="Meet Leafy">
+            <button
+              type="button"
+              className="bb-home-welcome-trigger"
+              onClick={openLeafyChat}
+              aria-label="Open chat with Leafy"
+            >
+              <div className="bb-char bb-char-home" aria-hidden="true">
+                <img src={LEAF_SRC} alt="" />
+              </div>
+            </button>
+            <div className="bb-home-welcome-copy">
+              <strong>Hi, I&apos;m Leafy — your BiteBetter pantry pal!</strong>
+              <p>
+                I&apos;m here to help you use what you&apos;ve already got, find
+                recipes, and eat a little healthier. Tap me anytime you want to
+                chat 🍃
+              </p>
+            </div>
+          </section>
+
           <section className="dash-hello glass-dark">
             <div>
               <p className="dash-kicker">Dashboard</p>
@@ -91,7 +114,7 @@ export default function Dashboard() {
               <p>
                 Ready for a vitality boost today? Your pantry is{" "}
                 <strong>{pantry.stockedPct}% stocked</strong> with essentials
-                from your recent HealthyFood shopping.
+                from your recent shops.
               </p>
             </div>
             <div className="dash-period">
@@ -144,8 +167,8 @@ export default function Dashboard() {
                 <MixRow label="Unhealthy" amount={spend.unhealthy} pct={spend.unhealthyPct} tone="unhealthy" />
               </div>
               <p className="dash-footnote">
-                Total spend {formatCurrency(spend.total)} · classified via
-                HealthyFood categories
+                Total spend {formatCurrency(spend.total)} · sorted by healthy,
+                neutral, and less healthy
               </p>
             </article>
 

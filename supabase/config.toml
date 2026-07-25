@@ -1,0 +1,8 @@
+name = "bitebetter"
+project_id = "ptdpdobvwivptpnnhafp"
+
+[api]
+enabled = true
+
+[functions.chat-assistant]
+verify_jwt = false
