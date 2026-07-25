@@ -403,7 +403,7 @@
 
 .fr-detail-item-top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.2rem;
@@ -428,14 +428,14 @@
 
 .fr-card-top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 0.05rem;
 }
 
 .fr-card.is-compact .fr-card-top {
-  margin-bottom: 0;
+  margin-bottom: 0.15rem;
 }
 
 .fr-qty-chip {
@@ -450,10 +450,24 @@
 }
 
 .fr-urgent {
-  color: #a61f1f;
+  display: inline-flex;
+  align-items: center;
   font-size: 0.72rem;
   font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+}
+
+.fr-urgent.is-past {
+  background: #fdecec;
+  color: #a61f1f;
+}
+
+.fr-urgent.is-soon {
+  background: #fdecec;
+  color: #a61f1f;
 }
 
 .fr-card h3 {
