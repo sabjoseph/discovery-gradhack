@@ -1,5 +1,11 @@
 const express = require("express");
 const supabase = require("../config/supabase");
+const {
+  loadPersonalisationContext,
+  annotateRecipe,
+  personalisedScore,
+  compareBySafetyThenScore,
+} = require("../utils/recipePersonalisation");
 
 const router = express.Router();
 
@@ -109,8 +115,12 @@ router.get("/", async (req, res) => {
     if (error) throw error;
 
     let pantryCats = new Set();
+    let personalisation = { allergies: [], preferences: [], healthGoals: [] };
     if (customerId) {
-      pantryCats = await getPantryCategoryIds(customerId);
+      [pantryCats, personalisation] = await Promise.all([
+        getPantryCategoryIds(customerId),
+        loadPersonalisationContext(customerId),
+      ]);
     }
 
     const mapped = (recipes || []).map((recipe) => {
@@ -127,6 +137,9 @@ router.get("/", async (req, res) => {
       const categories =
         categorySet.size > 0 ? [...categorySet] : ["Uncategorised"];
 
+      const nutrition = mapNutrition(recipe);
+      const annotation = annotateRecipe({ ...recipe, nutrition }, personalisation);
+
       return {
         id: recipe.id,
         name: recipe.name,
@@ -137,12 +150,27 @@ router.get("/", async (req, res) => {
         servings: recipe.servings,
         ingredientCount: recipe.recipe_ingredients?.length || 0,
         categories,
-        nutrition: mapNutrition(recipe),
+        nutrition,
         ...score,
+        ...annotation,
+        personalScore: personalisedScore({
+          pantryMatchPercent: score.matchPercent,
+          preferenceMatchPercent: annotation.preferences.matchPercent,
+          healthGoalScore: annotation.healthGoalScore,
+        }),
       };
     });
 
-    mapped.sort((a, b) => b.matchPercent - a.matchPercent || b.matchCount - a.matchCount);
+    // Safety first: a recipe containing a saved allergen never outranks a safe
+    // one. Pantry match stays the primary signal among safe recipes, with
+    // preference alignment breaking ties.
+    mapped.sort(
+      (a, b) =>
+        Number(a.isSafe === false) - Number(b.isSafe === false) ||
+        b.matchPercent - a.matchPercent ||
+        (b.personalScore ?? 0) - (a.personalScore ?? 0) ||
+        b.matchCount - a.matchCount
+    );
 
     res.json({ success: true, data: mapped });
   } catch (err) {
@@ -189,11 +217,19 @@ router.get("/:id", async (req, res) => {
     if (error) throw error;
 
     let pantryCats = new Set();
+    let personalisation = { allergies: [], preferences: [], healthGoals: [] };
     if (customerId) {
-      pantryCats = await getPantryCategoryIds(customerId);
+      [pantryCats, personalisation] = await Promise.all([
+        getPantryCategoryIds(customerId),
+        loadPersonalisationContext(customerId),
+      ]);
     }
 
     const score = scoreRecipe(recipe, pantryCats);
+    const nutrition = mapNutrition(recipe);
+    const annotation = annotateRecipe({ ...recipe, nutrition }, personalisation, {
+      includeSubstitutions: true,
+    });
 
     res.json({
       success: true,
@@ -205,21 +241,27 @@ router.get("/:id", async (req, res) => {
         healthScore: recipe.health_score,
         source: recipe.source,
         servings: recipe.servings,
-        nutrition: mapNutrition(recipe),
-        ingredients: (recipe.recipe_ingredients || []).map((ing) => ({
-          id: ing.id,
-          name: ing.ingredient_name,
-          quantity: ing.quantity_required,
-          unit: ing.unit,
-          categoryId: ing.category_id,
-          category:
-            ing.categories?.subcategory != null &&
-            String(ing.categories.subcategory).trim() !== ""
-              ? String(ing.categories.subcategory).trim()
-              : "Uncategorised",
-          have:
-            ing.category_id != null && pantryCats.has(ing.category_id),
-        })),
+        nutrition,
+        ...annotation,
+        ingredients: (recipe.recipe_ingredients || []).map((ing) => {
+          const allergenHit = annotation.allergen.matches.find(
+            (m) => m.ingredientName === ing.ingredient_name
+          );
+          return {
+            id: ing.id,
+            name: ing.ingredient_name,
+            quantity: ing.quantity_required,
+            unit: ing.unit,
+            categoryId: ing.category_id,
+            category:
+              ing.categories?.subcategory != null &&
+              String(ing.categories.subcategory).trim() !== ""
+                ? String(ing.categories.subcategory).trim()
+                : "Uncategorised",
+            have: ing.category_id != null && pantryCats.has(ing.category_id),
+            allergenLabel: allergenHit ? allergenHit.allergenLabel : null,
+          };
+        }),
         ...score,
       },
     });

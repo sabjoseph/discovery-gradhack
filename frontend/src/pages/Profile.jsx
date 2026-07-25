@@ -5,6 +5,8 @@ import { api, formatCurrency, formatDate, initials } from "../lib/api";
 import LoadingBlock from "../components/LoadingBlock";
 import "./Profile.css";
 
+// Fallbacks only. The API returns the authoritative lists in `data.options`,
+// which is what the recommendation engine actually understands.
 const DIET_SUGGESTIONS = [
   "Vegetarian",
   "Vegan",
@@ -12,8 +14,20 @@ const DIET_SUGGESTIONS = [
   "Dairy-free",
   "Low sugar",
   "High protein",
+  "Plant based",
+  "Low sodium",
+];
+
+const ALLERGY_SUGGESTIONS = [
   "Peanuts",
+  "Tree nuts",
+  "Milk",
+  "Eggs",
+  "Wheat",
+  "Soy",
+  "Fish",
   "Shellfish",
+  "Sesame",
 ];
 
 const GOAL_SUGGESTIONS = [
@@ -50,7 +64,8 @@ const ACCOUNT_PANELS = [
     id: "preferences",
     label: "Preferences",
     title: "Preferences",
-    blurb: "Dietary needs and health goals that personalise BiteBetter.",
+    blurb:
+      "Dietary preferences, food allergies and health goals that personalise BiteBetter.",
   },
 ];
 
@@ -118,13 +133,13 @@ function ChipField({
 }) {
   const [draft, setDraft] = useState("");
   const [showMore, setShowMore] = useState(false);
+  const inputId = `pf-chip-input-${tone}-${label.replace(/\s+/g, "-").toLowerCase()}`;
 
-  const available = suggestions.filter((opt) => !values.includes(opt));
+  const available = (suggestions || []).filter((opt) => !values.includes(opt));
   const visible = showMore ? available : available.slice(0, 3);
   const hiddenCount = Math.max(0, available.length - visible.length);
 
-  function submitDraft(e) {
-    e.preventDefault();
+  function submitDraft() {
     const next = draft.trim();
     if (!next) return;
     onAdd(next);
@@ -133,7 +148,9 @@ function ChipField({
 
   return (
     <div className="pf-chip-field">
-      <div className="pf-label">{label}</div>
+      <label className="pf-label" htmlFor={inputId}>
+        {label}
+      </label>
       {values.length === 0 && emptyHint ? (
         <p className="pf-hint pf-chip-empty">{emptyHint}</p>
       ) : null}
@@ -143,6 +160,7 @@ function ChipField({
             key={value}
             type="button"
             className={`pf-chip is-on tone-${tone}`}
+            aria-label={`Remove ${value}`}
             onClick={() => onRemove(value)}
           >
             {value}
@@ -154,6 +172,7 @@ function ChipField({
             key={opt}
             type="button"
             className="pf-chip"
+            aria-label={`Add ${opt}`}
             onClick={() => onToggle(opt)}
           >
             + {opt}
@@ -178,16 +197,28 @@ function ChipField({
           </button>
         )}
       </div>
-      <form className="pf-chip-add" onSubmit={submitDraft}>
+      {/* Not a nested <form> — nested forms break the parent Save Changes submit. */}
+      <div className="pf-chip-add">
         <input
+          id={inputId}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submitDraft();
+            }
+          }}
           placeholder={placeholder}
         />
-        <button type="submit" className="btn btn-sm btn-outline">
+        <button
+          type="button"
+          className="btn btn-sm btn-outline"
+          onClick={submitDraft}
+        >
           Add
         </button>
-      </form>
+      </div>
     </div>
   );
 }
@@ -216,10 +247,15 @@ export default function Profile() {
     weight_kg: "",
     height_cm: "",
     dietary_preferences: [],
+    allergies: [],
     health_goals: [],
     milestone_alerts: true,
     recommendation_nudges: true,
     avatar_url: null,
+  });
+  const [options, setOptions] = useState({
+    dietary_preferences: DIET_SUGGESTIONS,
+    allergies: ALLERGY_SUGGESTIONS,
   });
 
   useEffect(() => {
@@ -256,6 +292,7 @@ export default function Profile() {
           dietary_preferences: Array.isArray(profile.dietary_preferences)
             ? profile.dietary_preferences
             : [],
+          allergies: Array.isArray(profile.allergies) ? profile.allergies : [],
           health_goals: Array.isArray(profile.health_goals)
             ? profile.health_goals
             : [],
@@ -265,6 +302,17 @@ export default function Profile() {
         };
         setForm(next);
         setBaseline(next);
+        const apiOptions = profileRes.data.options;
+        if (apiOptions) {
+          setOptions({
+            dietary_preferences: Array.isArray(apiOptions.dietary_preferences)
+              ? apiOptions.dietary_preferences
+              : DIET_SUGGESTIONS,
+            allergies: Array.isArray(apiOptions.allergies)
+              ? apiOptions.allergies
+              : ALLERGY_SUGGESTIONS,
+          });
+        }
         setVouchers(Array.isArray(profile.vouchers) ? profile.vouchers : []);
         if (avatarUrl !== customer.avatarUrl) {
           setCustomer({ ...customer, avatarUrl });
@@ -399,25 +447,46 @@ export default function Profile() {
     setError("");
     try {
       const payload = {
-        ...form,
         budget_monthly:
           form.budget_monthly === "" ? null : Number(form.budget_monthly),
         age: form.age === "" ? null : Number(form.age),
         weight_kg: form.weight_kg === "" ? null : Number(form.weight_kg),
         height_cm: form.height_cm === "" ? null : Number(form.height_cm),
+        dietary_preferences: Array.isArray(form.dietary_preferences)
+          ? form.dietary_preferences
+          : [],
+        // Always send allergies so the backend never keeps a stale list.
+        allergies: Array.isArray(form.allergies) ? form.allergies : [],
+        health_goals: Array.isArray(form.health_goals) ? form.health_goals : [],
+        milestone_alerts: form.milestone_alerts,
+        recommendation_nudges: form.recommendation_nudges,
         avatar_url: form.avatar_url || null,
       };
       const res = await api.updateProfile(customer.id, payload);
-      const savedAvatar = res.data?.profile?.avatar_url ?? form.avatar_url ?? null;
+      // Named savedProfile so it cannot shadow the `saved` success-flag state.
+      const savedProfile = res.data?.profile || {};
+      const savedAvatar = savedProfile.avatar_url ?? form.avatar_url ?? null;
       const nextForm = {
-        ...form,
         budget_monthly:
-          form.budget_monthly === "" ? "" : String(Number(form.budget_monthly)),
-        age: form.age === "" ? "" : String(Number(form.age)),
+          savedProfile.budget_monthly == null
+            ? ""
+            : String(savedProfile.budget_monthly),
+        age: savedProfile.age == null ? "" : String(savedProfile.age),
         weight_kg:
-          form.weight_kg === "" ? "" : String(Number(form.weight_kg)),
+          savedProfile.weight_kg == null ? "" : String(savedProfile.weight_kg),
         height_cm:
-          form.height_cm === "" ? "" : String(Number(form.height_cm)),
+          savedProfile.height_cm == null ? "" : String(savedProfile.height_cm),
+        dietary_preferences: Array.isArray(savedProfile.dietary_preferences)
+          ? savedProfile.dietary_preferences
+          : payload.dietary_preferences,
+        allergies: Array.isArray(savedProfile.allergies)
+          ? savedProfile.allergies
+          : payload.allergies,
+        health_goals: Array.isArray(savedProfile.health_goals)
+          ? savedProfile.health_goals
+          : payload.health_goals,
+        milestone_alerts: form.milestone_alerts,
+        recommendation_nudges: form.recommendation_nudges,
         avatar_url: savedAvatar,
       };
       setBaseline(nextForm);
@@ -702,17 +771,45 @@ export default function Profile() {
               <>
                 <section className="pf-section">
                   <h3>Dietary preferences</h3>
+                  <p className="pf-hint pf-section-blurb">
+                    Choose preferences to personalise your recipe
+                    recommendations.
+                  </p>
                   <ChipField
-                    label="Allergies & preferences"
+                    label="Your dietary preferences"
                     values={form.dietary_preferences}
-                    suggestions={DIET_SUGGESTIONS}
+                    suggestions={options.dietary_preferences}
                     tone="coral"
-                    placeholder="Add a preference or allergy…"
+                    placeholder="Add a dietary preference…"
                     emptyHint="Add a preference to personalise recommendations."
                     onToggle={(v) => toggleList("dietary_preferences", v)}
                     onAdd={(v) => addToList("dietary_preferences", v)}
                     onRemove={(v) => removeFromList("dietary_preferences", v)}
                   />
+                </section>
+
+                <section className="pf-section">
+                  <h3>Food allergies</h3>
+                  <p className="pf-hint pf-section-blurb">
+                    Add ingredients that must be excluded or replaced when
+                    recipes are recommended.
+                  </p>
+                  <ChipField
+                    label="Your food allergies"
+                    values={form.allergies}
+                    suggestions={options.allergies}
+                    tone="allergy"
+                    placeholder="Add a food allergy…"
+                    emptyHint="Add an allergy so unsafe recipes are flagged."
+                    onToggle={(v) => toggleList("allergies", v)}
+                    onAdd={(v) => addToList("allergies", v)}
+                    onRemove={(v) => removeFromList("allergies", v)}
+                  />
+                  <p className="pf-hint pf-allergy-note">
+                    Allergies are treated as a safety restriction, not a
+                    preference. Always check product labels and seek
+                    professional advice for severe allergies.
+                  </p>
                 </section>
 
                 <section className="pf-section">

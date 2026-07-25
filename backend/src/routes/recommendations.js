@@ -1,12 +1,36 @@
 const express = require("express");
 const supabase = require("../config/supabase");
 const { getDatasetEndDate } = require("../utils/health");
+const {
+  loadPersonalisationContext,
+  annotateRecipe,
+  personalisedScore,
+  compareBySafetyThenScore,
+} = require("../utils/recipePersonalisation");
 
 const router = express.Router();
 
-// Simple rule-based scoring: rank recipes by pantry ingredient coverage.
-async function scoreRecipesForCustomer(customerId) {
-  const [{ data: pantry }, { data: recipes }] = await Promise.all([
+function mapNutrition(recipe) {
+  return {
+    calories: recipe.calories_per_serving,
+    protein: recipe.protein_g_per_serving,
+    carbohydrates: recipe.carbohydrates_g_per_serving,
+    sugar: recipe.sugar_g_per_serving,
+    totalFat: recipe.fat_g_per_serving,
+    saturatedFat: recipe.saturated_fat_g_per_serving,
+    fibre: recipe.fibre_g_per_serving,
+    sodium: recipe.sodium_mg_per_serving,
+    sodiumUnit: "mg",
+  };
+}
+
+/**
+ * Rank recipes by pantry coverage, then layer dietary-preference and health-goal
+ * alignment on top. Recipes containing a saved allergen are flagged unsafe and can
+ * never outrank a safe recipe, whatever their pantry score.
+ */
+async function scoreRecipesForCustomer(customerId, contextOverride) {
+  const [{ data: pantry }, { data: recipes }, context] = await Promise.all([
     supabase
       .from("pantry_items")
       .select("quantity_remaining, products ( category_id )")
@@ -14,7 +38,21 @@ async function scoreRecipesForCustomer(customerId) {
       .gt("quantity_remaining", 0),
     supabase
       .from("recipes")
-      .select("id, name, prep_time_minutes, servings, source, recipe_ingredients ( category_id )"),
+      .select(
+        `
+        id, name, prep_time_minutes, servings, source,
+        calories_per_serving, protein_g_per_serving, carbohydrates_g_per_serving,
+        sugar_g_per_serving, fat_g_per_serving, saturated_fat_g_per_serving,
+        fibre_g_per_serving, sodium_mg_per_serving,
+        recipe_ingredients (
+          id, ingredient_name, category_id, quantity_required, unit,
+          categories ( id, main_category, subcategory )
+        )
+      `
+      ),
+    contextOverride
+      ? Promise.resolve(contextOverride)
+      : loadPersonalisationContext(customerId),
   ]);
 
   const pantryCats = new Set(
@@ -28,31 +66,51 @@ async function scoreRecipesForCustomer(customerId) {
       const matchCount = ingredients.filter(
         (ing) => ing.category_id != null && pantryCats.has(ing.category_id)
       ).length;
+      const matchPercent = Math.round((matchCount / total) * 100);
+
+      const nutrition = mapNutrition(recipe);
+      const annotation = annotateRecipe({ ...recipe, nutrition }, context);
+
       return {
         recipeId: recipe.id,
         name: recipe.name,
         matchCount,
         totalIngredients: ingredients.length,
         missingCount: ingredients.length - matchCount,
-        matchPercent: Math.round((matchCount / total) * 100),
+        matchPercent,
+        isSafe: annotation.isSafe,
+        allergen: annotation.allergen,
+        preferences: annotation.preferences,
+        healthGoalScore: annotation.healthGoalScore,
+        personalScore: personalisedScore({
+          pantryMatchPercent: matchPercent,
+          preferenceMatchPercent: annotation.preferences.matchPercent,
+          healthGoalScore: annotation.healthGoalScore,
+        }),
       };
     })
-    .sort((a, b) => b.matchPercent - a.matchPercent || b.matchCount - a.matchCount);
+    .sort(compareBySafetyThenScore);
 }
 
 function reasonFor(score) {
+  const prefLabels = (score.preferences?.matched || []).map((p) => p.label);
+  const prefSuffix =
+    prefLabels.length > 0 ? ` It also fits your ${prefLabels.join(" and ")} preference${prefLabels.length > 1 ? "s" : ""}.` : "";
+
   if (score.matchPercent >= 80) {
-    return `You have most of what this needs — ${score.matchCount} of ${score.totalIngredients} ingredients are already in your pantry.`;
+    return `You have most of what this needs — ${score.matchCount} of ${score.totalIngredients} ingredients are already in your pantry.${prefSuffix}`;
   }
   if (score.matchPercent >= 50) {
-    return `A good pantry fit: ${score.matchCount} of ${score.totalIngredients} ingredients on hand, only ${score.missingCount} to buy.`;
+    return `A good pantry fit: ${score.matchCount} of ${score.totalIngredients} ingredients on hand, only ${score.missingCount} to buy.${prefSuffix}`;
   }
-  return `Worth a look — you already have ${score.matchCount} of ${score.totalIngredients} ingredients for this recipe.`;
+  return `Worth a look — you already have ${score.matchCount} of ${score.totalIngredients} ingredients for this recipe.${prefSuffix}`;
 }
 
 async function generateRecommendations(customerId) {
   const scores = await scoreRecipesForCustomer(customerId);
-  const top = scores.slice(0, 3);
+  // Only allergen-free recipes are stored as primary recommendations.
+  const safe = scores.filter((s) => s.isSafe);
+  const top = (safe.length > 0 ? safe : []).slice(0, 3);
   if (top.length === 0) return;
 
   const rows = top.map((score) => ({
@@ -172,6 +230,11 @@ router.get("/:customerId", async (req, res) => {
         matchCount: score?.matchCount ?? null,
         totalIngredients: score?.totalIngredients ?? null,
         estimatedMissingCost,
+        // Safety and preference context for the card.
+        isSafe: score ? score.isSafe : true,
+        allergen: score?.allergen ?? null,
+        preferences: score?.preferences ?? null,
+        personalScore: score?.personalScore ?? null,
       };
     });
 
@@ -185,6 +248,9 @@ router.get("/:customerId", async (req, res) => {
           item.estimatedMissingCost <= Math.max(0, budget.remaining)
       );
     }
+
+    // Safety outranks every other signal, including pantry match.
+    feed.sort(compareBySafetyThenScore);
 
     res.json({
       success: true,

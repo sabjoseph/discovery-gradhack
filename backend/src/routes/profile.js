@@ -1,6 +1,14 @@
 const express = require("express");
 const supabase = require("../config/supabase");
 const { extractVouchers, withVouchers } = require("../utils/vouchers");
+const {
+  extractAllergies,
+  withAllergies,
+} = require("../utils/recipePersonalisation");
+const { ALLERGEN_LABELS } = require("../data/allergens");
+const {
+  DIETARY_PREFERENCE_LABELS,
+} = require("../utils/dietaryPreferences");
 
 const router = express.Router();
 
@@ -11,6 +19,7 @@ const MAX_AVATAR_CHARS = 350_000; // ~resized jpeg data URL
 //   { __metrics: true, age, weight_kg, height_cm }
 //   { __vouchers: true, items: [...] }
 //   { __avatar: true, dataUrl }
+//   { __allergies: true, items: [...] }   // food allergies, kept apart from dietary_preferences
 function extractAvatar(healthGoals) {
   const list = Array.isArray(healthGoals) ? healthGoals : [];
   const entry = list.find(
@@ -45,10 +54,14 @@ function splitHealthGoals(raw) {
     height_cm: metricsEntry?.height_cm ?? null,
     vouchers: extractVouchers(list),
     avatar_url: extractAvatar(list),
+    allergies: extractAllergies(list),
   };
 }
 
-function mergeHealthGoals(goals, { age, weight_kg, height_cm, vouchers, avatar_url }) {
+function mergeHealthGoals(
+  goals,
+  { age, weight_kg, height_cm, vouchers, avatar_url, allergies }
+) {
   let list = Array.isArray(goals)
     ? goals.filter((item) => typeof item === "string")
     : [];
@@ -70,6 +83,7 @@ function mergeHealthGoals(goals, { age, weight_kg, height_cm, vouchers, avatar_u
   if (avatar_url) {
     list = withAvatar(list, avatar_url);
   }
+  list = withAllergies(list, allergies);
   return list;
 }
 
@@ -134,6 +148,7 @@ router.get("/:customerId", async (req, res) => {
           dietary_preferences: Array.isArray(profile?.dietary_preferences)
             ? profile.dietary_preferences.filter((x) => typeof x === "string")
             : [],
+          allergies: split.allergies,
           health_goals: split.health_goals,
           age: split.age,
           weight_kg: weight,
@@ -146,6 +161,10 @@ router.get("/:customerId", async (req, res) => {
         notifications: notifications || {
           milestone_alerts: true,
           recommendation_nudges: true,
+        },
+        options: {
+          dietary_preferences: DIETARY_PREFERENCE_LABELS,
+          allergies: ALLERGEN_LABELS,
         },
       },
     });
@@ -160,6 +179,7 @@ router.put("/:customerId", async (req, res) => {
     const {
       budget_monthly,
       dietary_preferences,
+      allergies,
       health_goals,
       age,
       weight_kg,
@@ -217,6 +237,16 @@ router.put("/:customerId", async (req, res) => {
       .maybeSingle();
     const existingVouchers = extractVouchers(existingProfile?.health_goals);
     const existingAvatar = extractAvatar(existingProfile?.health_goals);
+    const existingAllergies = extractAllergies(existingProfile?.health_goals);
+    // Only replace allergies when the client actually sends the field.
+    const nextAllergies = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "allergies"
+    )
+      ? (Array.isArray(allergies) ? allergies : []).filter(
+          (x) => typeof x === "string" && x.trim()
+        )
+      : existingAllergies;
 
     let nextAvatar = existingAvatar;
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "avatar_url")) {
@@ -249,6 +279,7 @@ router.put("/:customerId", async (req, res) => {
         height_cm: heightParsed.value,
         vouchers: existingVouchers,
         avatar_url: nextAvatar,
+        allergies: nextAllergies,
       }),
       updated_at: new Date().toISOString(),
     };
@@ -300,7 +331,11 @@ router.put("/:customerId", async (req, res) => {
       success: true,
       data: {
         profile: {
-          ...profile,
+          budget_monthly: profile.budget_monthly ?? null,
+          dietary_preferences: Array.isArray(profile.dietary_preferences)
+            ? profile.dietary_preferences.filter((x) => typeof x === "string")
+            : [],
+          allergies: split.allergies,
           health_goals: split.health_goals,
           age: split.age,
           weight_kg: split.weight_kg,
@@ -308,6 +343,7 @@ router.put("/:customerId", async (req, res) => {
           bmi: calcBmi(split.weight_kg, split.height_cm),
           vouchers: split.vouchers,
           avatar_url: split.avatar_url,
+          updated_at: profile.updated_at ?? null,
         },
         notifications,
       },

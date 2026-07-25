@@ -99,6 +99,14 @@ export default function RecipeDetail() {
     return [...(recipe.have || []), ...(recipe.need || [])];
   }, [recipe]);
 
+  const swapByIngredient = useMemo(() => {
+    const map = new Map();
+    for (const group of recipe?.substitutions?.groups || []) {
+      map.set(String(group.ingredientName || "").toLowerCase(), group);
+    }
+    return map;
+  }, [recipe]);
+
   const adjustmentMessage = servingsAdjustmentMessage(
     desiredServings,
     originalServings
@@ -173,6 +181,22 @@ export default function RecipeDetail() {
             {recipe.matchPercent != null && (
               <p>{recipe.matchPercent}% pantry match</p>
             )}
+            {recipe.preferences?.badges?.length > 0 && (
+              <ul className="rp-detail-pref-badges">
+                {recipe.preferences.badges.map((label) => (
+                  <li
+                    key={label}
+                    className={
+                      recipe.preferences.matched?.some((m) => m.label === label)
+                        ? "is-matched"
+                        : ""
+                    }
+                  >
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="rp-detail-stat">
             <span>You have</span>
@@ -181,6 +205,39 @@ export default function RecipeDetail() {
             </strong>
           </div>
         </header>
+
+        {recipe.allergen?.hasAllergen && (
+          <section className="rp-allergen-banner" role="alert">
+            <h2>
+              <span aria-hidden="true">⚠</span> Allergy warning
+            </h2>
+            <p>{recipe.allergen.warning}</p>
+            <ul>
+              {recipe.allergen.matches.map((m, i) => (
+                <li key={`${m.ingredientName}-${i}`}>
+                  <strong>{m.ingredientName}</strong> contains{" "}
+                  {m.allergenLabel}
+                </li>
+              ))}
+            </ul>
+            {recipe.allergen.needsReview?.length > 0 && (
+              <p className="rp-allergen-review">
+                We could not confidently classify{" "}
+                {recipe.allergen.needsReview
+                  .map((n) => n.ingredientName)
+                  .join(", ")}
+                . Check these ingredients yourself.
+              </p>
+            )}
+            {recipe.allergen.unrecognisedAllergies?.length > 0 && (
+              <p className="rp-allergen-review">
+                We cannot yet check for{" "}
+                {recipe.allergen.unrecognisedAllergies.join(", ")}. Review the
+                ingredients yourself.
+              </p>
+            )}
+          </section>
+        )}
 
         <div className="rp-detail-meta">
           <div className="rp-meta-card">
@@ -264,28 +321,158 @@ export default function RecipeDetail() {
           ) : null}
           {ingredients.length ? (
             <ul className="rp-ing-list">
-              {ingredients.map((ing) => (
-                <li key={ing.id}>
-                  <span className={ing.have ? "have" : "need"}>
-                    {ing.have ? "✓" : "○"}
-                  </span>
-                  <span>
-                    {formatScaledIngredient(
-                      ing,
-                      desiredServings,
-                      originalServings
-                    )}
-                    {ing.category ? (
-                      <small className="rp-ing-cat"> · {ing.category}</small>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
+              {ingredients.map((ing) => {
+                const swapGroup = swapByIngredient.get(
+                  String(ing.name || "").toLowerCase()
+                );
+                const topSwap = swapGroup?.options?.[0] || null;
+                return (
+                  <li
+                    key={ing.id}
+                    className={ing.allergenLabel ? "is-allergen" : ""}
+                  >
+                    <span className={ing.have ? "have" : "need"}>
+                      {ing.have ? "✓" : "○"}
+                    </span>
+                    <span className="rp-ing-body">
+                      <span>
+                        {formatScaledIngredient(
+                          ing,
+                          desiredServings,
+                          originalServings
+                        )}
+                        {ing.allergenLabel ? (
+                          <small className="rp-ing-allergen">
+                            {" "}
+                            · {ing.allergenLabel} allergen
+                          </small>
+                        ) : null}
+                        {ing.category ? (
+                          <small className="rp-ing-cat"> · {ing.category}</small>
+                        ) : null}
+                      </span>
+                      {topSwap ? (
+                        <span className="rp-ing-swap">
+                          Swap for{" "}
+                          <strong>{topSwap.substitute}</strong>
+                          {topSwap.adjustedQuantity != null
+                            ? ` (${topSwap.adjustedQuantity}${
+                                topSwap.unit ? ` ${topSwap.unit}` : ""
+                              })`
+                            : ""}
+                          {swapGroup.options.length > 1
+                            ? ` · +${swapGroup.options.length - 1} more below`
+                            : ""}
+                        </span>
+                      ) : null}
+                      {swapGroup && !topSwap && swapGroup.message ? (
+                        <span className="rp-ing-swap is-missing">
+                          {swapGroup.message}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="rp-empty">No ingredients listed for this recipe.</p>
           )}
         </section>
+
+        {recipe.substitutions?.groups?.length > 0 && (
+          <section
+            className="rp-detail-section rp-subs"
+            aria-labelledby="rp-subs-heading"
+          >
+            <h2 id="rp-subs-heading">Allergen-friendly alternatives</h2>
+            <p className="rp-subs-intro">
+              Optional swaps for the ingredients flagged above. The original
+              recipe is left unchanged.
+            </p>
+            {recipe.substitutions.groups.map((group) => (
+              <article key={group.ingredientName} className="rp-subs-group">
+                <h3>
+                  Instead of {group.ingredientName}
+                  <small> · {group.allergenLabel}</small>
+                </h3>
+                {group.message ? (
+                  <p className="rp-empty">{group.message}</p>
+                ) : (
+                  <ul className="rp-subs-options">
+                    {group.options.map((opt) => (
+                      <li key={opt.id}>
+                        <div className="rp-subs-option-head">
+                          <strong>{opt.substitute}</strong>
+                          <span className="rp-subs-context">
+                            {opt.cookingContext}
+                          </span>
+                        </div>
+                        {opt.adjustedQuantity != null && (
+                          <p className="rp-subs-qty">
+                            Use {opt.adjustedQuantity}
+                            {opt.unit ? ` ${opt.unit}` : ""} in place of{" "}
+                            {opt.originalQuantity}
+                            {opt.unit ? ` ${opt.unit}` : ""}
+                          </p>
+                        )}
+                        <table className="rp-subs-table">
+                          <caption>
+                            Nutritional comparison, {opt.comparison.basis}
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">Nutrient</th>
+                              <th scope="col">Original</th>
+                              <th scope="col">Alternative</th>
+                              <th scope="col">Change</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {opt.comparison.rows.map((row) => (
+                              <tr key={row.label}>
+                                <th scope="row">{row.label}</th>
+                                <td>
+                                  {row.available
+                                    ? `${row.original} ${row.unit}`
+                                    : "Not available"}
+                                </td>
+                                <td>
+                                  {row.available
+                                    ? `${row.substitute} ${row.unit}`
+                                    : "Not available"}
+                                </td>
+                                <td>
+                                  {row.deltaPercent == null
+                                    ? "—"
+                                    : `${row.deltaPercent > 0 ? "+" : ""}${
+                                        row.deltaPercent
+                                      }%`}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p
+                          className={`rp-subs-summary ${
+                            opt.comparison.broadlyComparable ? "is-close" : ""
+                          }`}
+                        >
+                          {opt.comparison.summary}
+                        </p>
+                        {opt.caveat && (
+                          <p className="rp-subs-caveat">{opt.caveat}</p>
+                        )}
+                        <p className="rp-subs-source">Source: {opt.source}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            ))}
+            <p className="rp-subs-notice">{recipe.substitutions.notice}</p>
+          </section>
+        )}
 
         <section className="rp-detail-section rp-method">
           <h2>Cooking instructions</h2>
