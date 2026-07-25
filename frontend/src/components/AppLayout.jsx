@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
-import { initials } from "../lib/api";
+import { api, initials } from "../lib/api";
 import FloatingCharacter from "./FloatingCharacter";
 
 const links = [
@@ -38,7 +38,13 @@ export default function AppLayout() {
       .then((res) => {
         if (!alive) return;
         const avatarUrl = res.data?.profile?.avatar_url || null;
-        if (avatarUrl) setCustomer({ ...customer, avatarUrl });
+        if (avatarUrl) {
+          setCustomer({
+            ...customer,
+            avatarUrl,
+            ...(customer.token ? { token: customer.token } : {}),
+          });
+        }
       })
       .catch(() => {});
     return () => {
