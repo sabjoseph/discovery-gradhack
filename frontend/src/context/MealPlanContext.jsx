@@ -76,6 +76,12 @@ export function MealPlanProvider({ children }) {
           [day]: { ...prev[day], [meal]: null },
         }));
       },
+      clearDay: (day) => {
+        setPlan((prev) => ({
+          ...prev,
+          [day]: Object.fromEntries(MEALS.map((meal) => [meal, null])),
+        }));
+      },
       clearWeek: () => setPlan(emptyWeek()),
     }),
     [plan]

@@ -10,9 +10,9 @@ import Purchases from "./pages/Purchases";
 import Pantry from "./pages/Pantry";
 import Recipes from "./pages/Recipes";
 import RecipeDetail from "./pages/RecipeDetail";
-import Recommendations from "./pages/Recommendations";
 import Rewards from "./pages/Rewards";
 import Profile from "./pages/Profile";
+import Analytics from "./pages/Analytics";
 
 export default function App() {
   return (
@@ -25,11 +25,15 @@ export default function App() {
               <Route element={<RequireCustomer />}>
                 <Route path="/app" element={<AppLayout />}>
                   <Route index element={<Dashboard />} />
+                  <Route path="analytics" element={<Analytics />} />
                   <Route path="purchases" element={<Purchases />} />
                   <Route path="pantry" element={<Pantry />} />
                   <Route path="recipes" element={<Recipes />} />
                   <Route path="recipes/:id" element={<RecipeDetail />} />
-                  <Route path="recommendations" element={<Recommendations />} />
+                  <Route
+                    path="recommendations"
+                    element={<Navigate to="/app/recipes#for-you" replace />}
+                  />
                   <Route path="rewards" element={<Rewards />} />
                   <Route path="profile" element={<Profile />} />
                 </Route>

@@ -24,9 +24,9 @@ const AISLES = [
   },
   {
     id: 3,
-    to: "/app/recommendations",
+    to: "/app/recipes#for-you",
     title: "Vitality Analytics",
-    blurb: "See healthier picks tailored to your shopping patterns.",
+    blurb: "Close your rings, benchmark peers, and simulate healthier swaps.",
     image:
       "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80",
   },
