@@ -499,6 +499,9 @@
   gap: 0.35rem;
   text-align: center;
   width: 190px;
+  align-self: flex-start;
+  margin-top: 0.5rem;
+  margin-right: 2.5rem;
   padding: 1.35rem 1.1rem;
   border: none;
   border-radius: 18px;
@@ -596,5 +599,7 @@
   .ph-add-cta {
     width: 100%;
     max-width: 280px;
+    align-self: center;
+    margin: 0;
   }
 }

@@ -72,12 +72,15 @@ function mapPurchaseItem(row) {
   };
 }
 
-async function getDatasetEndDate() {
-  const { data, error } = await supabase
+async function getDatasetEndDate(customerId) {
+  let query = supabase
     .from("baskets")
     .select("purchase_date")
     .order("purchase_date", { ascending: false })
     .limit(1);
+  if (customerId) query = query.eq("customer_id", customerId);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("dataset end date lookup failed:", error.message);
@@ -90,7 +93,7 @@ async function getDatasetEndDate() {
 }
 
 async function fetchCustomerContext(customerId) {
-  const endDate = await getDatasetEndDate();
+  const endDate = await getDatasetEndDate(customerId);
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - 30);
   const startIso = startDate.toISOString().slice(0, 10);

@@ -6,6 +6,11 @@ const {
   daysUntilFrom,
   getDatasetEndDate,
 } = require("../utils/health");
+const {
+  spendStatsForWindow,
+  windowStartFor,
+  SPEND_WINDOW_LABEL,
+} = require("../utils/budgetMonth");
 
 const router = express.Router();
 
@@ -22,19 +27,19 @@ router.get("/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
     const days = Number(req.query.days || 30);
-    const since = await daysAgo(days);
-    const datasetEnd = await getDatasetEndDate();
+    const since = await daysAgo(days, customerId);
+    const datasetEnd = await getDatasetEndDate(customerId);
 
-    const monthStart = new Date(datasetEnd);
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    // Fixed 30-day budget window (independent of the 7d/30d trend toggle),
+    // matching the Purchases page summary.
+    const budgetWindowStart = windowStartFor(datasetEnd);
 
     const [
       { data: baskets, error: basketError },
       { data: pantry, error: pantryError },
       { data: profile },
       { data: recipes, error: recipeError },
-      { data: monthBaskets, error: monthError },
+      { data: recentMonthBaskets, error: monthError },
     ] = await Promise.all([
       supabase
         .from("baskets")
@@ -104,11 +109,12 @@ router.get("/:customerId", async (req, res) => {
         .select(
           `
           purchase_date,
+          retailers ( name ),
           basket_items ( line_total )
         `
         )
         .eq("customer_id", customerId)
-        .gte("purchase_date", monthStart.toISOString()),
+        .gte("purchase_date", budgetWindowStart.toISOString()),
     ]);
 
     if (basketError) throw basketError;
@@ -214,12 +220,11 @@ router.get("/:customerId", async (req, res) => {
         }
       : null;
 
-    let monthSpend = 0;
-    for (const basket of monthBaskets || []) {
-      for (const item of basket.basket_items || []) {
-        monthSpend += Number(item.line_total || 0);
-      }
-    }
+    const activeMonth = spendStatsForWindow(
+      recentMonthBaskets,
+      budgetWindowStart,
+      datasetEnd
+    );
 
     const healthGoals = Array.isArray(profile?.health_goals)
       ? profile.health_goals.filter((x) => typeof x === "string")
@@ -234,10 +239,14 @@ router.get("/:customerId", async (req, res) => {
       budgetMonthly != null && !Number.isNaN(budgetMonthly)
         ? {
             budgetMonthly,
-            monthSpend,
-            remaining: budgetMonthly - monthSpend,
+            monthLabel: SPEND_WINDOW_LABEL,
+            monthSpend: activeMonth.monthSpend,
+            remaining: budgetMonthly - activeMonth.monthSpend,
             usedPct: budgetMonthly
-              ? Math.min(100, Math.round((monthSpend / budgetMonthly) * 100))
+              ? Math.min(
+                  100,
+                  Math.round((activeMonth.monthSpend / budgetMonthly) * 100)
+                )
               : 0,
             dietaryPreferences,
             healthGoals,

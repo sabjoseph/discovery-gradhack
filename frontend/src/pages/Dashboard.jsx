@@ -49,7 +49,9 @@ function buildWins({ spend, pantry, budget, days }) {
       id: "budget",
       label: "On budget",
       value: formatCurrency(budget.remaining),
-      detail: "still left this month",
+      detail: budget.monthLabel
+        ? `still left · ${budget.monthLabel}`
+        : "still left this month",
     });
   }
 
