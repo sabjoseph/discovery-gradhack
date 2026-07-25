@@ -225,7 +225,7 @@ export default function Analytics() {
         </div>
 
         <div className="an-triple">
-          <div className="an-goal-ring">
+          <div className="an-goal-ring is-labelled">
             <ProgressRing
               value={rings.healthy.current}
               max={rings.healthy.target}
@@ -233,8 +233,8 @@ export default function Analytics() {
               stroke={10}
               color="#7bbc43"
             >
-              <strong>{rings.healthy.current}%</strong>
-              <span>of {rings.healthy.target}%</span>
+              <strong>healthy: {rings.healthy.current}%</strong>
+              <span>goal: {rings.healthy.target}%</span>
             </ProgressRing>
             <h3>Healthy</h3>
             <p className={rings.healthy.closed ? "is-closed-label" : undefined}>
