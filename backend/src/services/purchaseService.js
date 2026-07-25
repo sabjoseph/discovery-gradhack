@@ -260,8 +260,8 @@ async function createPurchase({ customerId, store, purchaseDate, items, receipt 
     },
   });
 
-  // Spending analytics derive month windows from the latest basket date.
-  invalidateDatasetEnd();
+  // Spending analytics derive month windows from this customer's latest basket.
+  invalidateDatasetEnd(customerId);
 
   return {
     basketId,

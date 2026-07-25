@@ -218,7 +218,9 @@ export default function Dashboard() {
                   <strong>{formatCurrency(budget.budgetMonthly)}</strong>
                 </div>
                 <div>
-                  <span className="dash-label">Spent this month</span>
+                  <span className="dash-label">
+                    Spent{budget.monthLabel ? ` · ${budget.monthLabel}` : " this month"}
+                  </span>
                   <strong>{formatCurrency(budget.monthSpend)}</strong>
                 </div>
                 <div>

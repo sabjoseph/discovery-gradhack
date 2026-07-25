@@ -406,9 +406,9 @@ router.get("/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
     const days = Number(req.query.days || 90);
-    const since = await daysAgo(days);
-    const previousSince = await daysAgo(days * 2);
-    const datasetEnd = await getDatasetEndDate();
+    const since = await daysAgo(days, customerId);
+    const previousSince = await daysAgo(days * 2, customerId);
+    const datasetEnd = await getDatasetEndDate(customerId);
 
     const monthStart = new Date(datasetEnd);
     monthStart.setDate(1);

@@ -30,7 +30,7 @@ router.get("/:customerId", async (req, res) => {
 
     if (error) throw error;
 
-    const datasetEnd = await getDatasetEndDate();
+    const datasetEnd = await getDatasetEndDate(customerId);
     const items = (data || []).map((row) => {
       const daysLeft = daysUntilFrom(row.expiry_estimate, datasetEnd);
       return {

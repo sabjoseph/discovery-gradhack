@@ -5,6 +5,11 @@ const { classifyFromLabel, getDatasetEndDate } = require("../utils/health");
 const { extractReceipt } = require("../services/ocr");
 const { uploadReceiptImage, getReceiptForBasket } = require("../services/receiptStorage");
 const { createPurchase, SUPPORTED_STORES } = require("../services/purchaseService");
+const {
+  groupSpendByMonth,
+  pickActiveBudgetMonth,
+  monthLabel,
+} = require("../utils/budgetMonth");
 
 const router = express.Router();
 
@@ -24,13 +29,6 @@ const upload = multer({
     cb(new Error("Unsupported file type. Use JPG, PNG, WEBP, HEIC or PDF."));
   },
 });
-
-function retailerBucket(name) {
-  const label = (name || "").toLowerCase();
-  if (label.includes("checker")) return "checkers";
-  if (label.includes("woolworth") || label.includes("woolies")) return "woolies";
-  return "other";
-}
 
 function mapItem(item) {
   const cat = item.products?.categories;
@@ -187,7 +185,7 @@ router.get("/:customerId/meta", async (req, res) => {
 router.get("/:customerId/summary", async (req, res) => {
   try {
     const { customerId } = req.params;
-    const datasetEnd = await getDatasetEndDate();
+    const datasetEnd = await getDatasetEndDate(customerId);
 
     // Look back far enough that a single new receipt in a fresh month
     // doesn't empty the budget ring (seed data is usually the prior month).
@@ -218,74 +216,11 @@ router.get("/:customerId/summary", async (req, res) => {
 
     if (basketsError) throw basketsError;
 
-    // Group spend by calendar month (YYYY-MM), then pick the active budget
-    // month from the most recent few months. A single OCR save in a brand-new
-    // month shouldn't empty the ring (seed shopping is usually the prior month).
-    const byMonth = {};
-    for (const basket of recentBaskets || []) {
-      if (!basket.purchase_date) continue;
-      const key = basket.purchase_date.slice(0, 7);
-      if (!byMonth[key]) {
-        byMonth[key] = {
-          monthSpend: 0,
-          checkersSpend: 0,
-          wooliesSpend: 0,
-          otherSpend: 0,
-          basketCount: 0,
-        };
-      }
-      let basketTotal = 0;
-      for (const item of basket.basket_items || []) {
-        basketTotal += Number(item.line_total || 0);
-      }
-      const bucket = retailerBucket(basket.retailers?.name);
-      byMonth[key].monthSpend += basketTotal;
-      byMonth[key].basketCount += 1;
-      if (bucket === "checkers") byMonth[key].checkersSpend += basketTotal;
-      else if (bucket === "woolies") byMonth[key].wooliesSpend += basketTotal;
-      else byMonth[key].otherSpend += basketTotal;
-    }
-
-    const candidateKeys = [];
-    for (let i = 0; i < 3; i += 1) {
-      const d = new Date(datasetEnd);
-      d.setDate(1);
-      d.setMonth(d.getMonth() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      if (byMonth[key]) candidateKeys.push(key);
-    }
-
-    let activeKey = candidateKeys[0] || Object.keys(byMonth).sort().pop() || null;
-    if (candidateKeys.length > 1) {
-      const latest = byMonth[candidateKeys[0]];
-      const latestIsSparse =
-        latest.basketCount <= 2 ||
-        candidateKeys.slice(1).some(
-          (key) => latest.monthSpend < byMonth[key].monthSpend * 0.25
-        );
-
-      if (latestIsSparse) {
-        activeKey = candidateKeys.slice(1).reduce((best, key) => {
-          const a = byMonth[key];
-          const b = byMonth[best];
-          if (a.monthSpend > b.monthSpend) return key;
-          if (a.monthSpend === b.monthSpend && a.basketCount > b.basketCount) return key;
-          return best;
-        }, candidateKeys[1]);
-      }
-    }
-
-    const active = (activeKey && byMonth[activeKey]) || {
-      monthSpend: 0,
-      checkersSpend: 0,
-      wooliesSpend: 0,
-      otherSpend: 0,
-      basketCount: 0,
-    };
-
-    const monthStart = activeKey
-      ? new Date(`${activeKey}-01T00:00:00`)
-      : new Date(datasetEnd.getFullYear(), datasetEnd.getMonth(), 1);
+    const byMonth = groupSpendByMonth(recentBaskets || []);
+    const { key: activeKey, stats: active } = pickActiveBudgetMonth(
+      byMonth,
+      datasetEnd
+    );
 
     const budgetMonthly =
       profile?.budget_monthly != null ? Number(profile.budget_monthly) : null;
@@ -299,10 +234,7 @@ router.get("/:customerId/summary", async (req, res) => {
     res.json({
       success: true,
       data: {
-        monthLabel: monthStart.toLocaleString("en-ZA", {
-          month: "long",
-          year: "numeric",
-        }),
+        monthLabel: monthLabel(activeKey),
         datasetEnd: datasetEnd.toISOString(),
         budgetMonthly: hasBudget ? budgetMonthly : null,
         monthSpend: active.monthSpend,
