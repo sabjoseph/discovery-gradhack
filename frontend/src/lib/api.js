@@ -25,6 +25,8 @@ async function put(path, body) {
 export const api = {
   getCustomers: (q) => get("/api/customers", q ? { q } : undefined),
   getCustomer: (id) => get(`/api/customers/${id}`),
+  createCustomer: (firstName, surname) =>
+    post("/api/customers", { firstName, surname }),
   getDashboard: (customerId, days = 30) =>
     get(`/api/dashboard/${customerId}`, { days }),
   getPurchases: (customerId, params) =>
