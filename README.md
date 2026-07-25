@@ -1,5 +1,5 @@
 <p align="center">
- <img src="frontend/public/.png" alt="BiteBetter Logo" width="220">
+ <img src="frontend/public/BiteBetter Logo.png" alt="BiteBetter Logo" width="220">
 </p>
 
 <h1 align="center">🍏 BiteBetter</h1>
