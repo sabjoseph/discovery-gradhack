@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { useShoppingList } from "../context/ShoppingListContext";
 import { DAYS, MEALS, useMealPlan } from "../context/MealPlanContext";
+import { resolveAssignSlot } from "../lib/mealPlanSlot";
 import { api, formatCurrency } from "../lib/api";
 import {
   FOOD_CATEGORIES,
@@ -26,15 +27,6 @@ function formatIngredientLine(ing) {
   return qty ? `${ing.name} (${qty})` : ing.name;
 }
 
-function findNextEmptySlot(plan) {
-  for (const day of DAYS) {
-    for (const meal of MEALS) {
-      if (!plan[day]?.[meal]) return { day, meal };
-    }
-  }
-  return { day: DAYS[0], meal: "Dinner" };
-}
-
 function toMealPlanRecipe(item) {
   const recipe = item.recipe;
   if (!recipe?.id) return null;
@@ -51,7 +43,8 @@ function toMealPlanRecipe(item) {
 export default function Recipes() {
   const { customer } = useCustomer();
   const { items: shoppingItems, clear, pruneClearedRecipes } = useShoppingList();
-  const { plan, assignRecipe, clearSlot, clearDay, clearWeek } = useMealPlan();
+  const { plan, pendingSlot, setPendingSlot, assignRecipe, clearSlot, clearDay, clearWeek } =
+    useMealPlan();
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -61,7 +54,7 @@ export default function Recipes() {
   const [preferencesOnly, setPreferencesOnly] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [activeDay, setActiveDay] = useState(DAYS[0]);
-  const [assignTarget, setAssignTarget] = useState(null);
+  const [activeMeal, setActiveMeal] = useState("Dinner");
   const [confirmDay, setConfirmDay] = useState(null);
 
   const [recs, setRecs] = useState([]);
@@ -178,10 +171,16 @@ export default function Recipes() {
     hasSavedPreferences,
   ]);
 
-  function handleAssign(recipe) {
-    if (!assignTarget) return;
-    assignRecipe(assignTarget.day, assignTarget.meal, recipe);
-    setAssignTarget(null);
+  function selectPlannerSlot(day, meal) {
+    setActiveDay(day);
+    setActiveMeal(meal);
+    setPendingSlot({ day, meal });
+  }
+
+  function handleAssign(recipe, slot = pendingSlot) {
+    const target = slot ?? resolveAssignSlot(null, activeDay, activeMeal);
+    assignRecipe(target.day, target.meal, recipe);
+    setPendingSlot(null);
   }
 
   const activeDayMealCount = MEALS.filter(
@@ -233,7 +232,7 @@ export default function Recipes() {
     };
     clearDay(day);
     syncShoppingListAfterClearDay(day, nextPlan);
-    if (assignTarget?.day === day) setAssignTarget(null);
+    if (pendingSlot?.day === day) setPendingSlot(null);
     setConfirmDay(null);
   }
 
@@ -247,9 +246,10 @@ export default function Recipes() {
       } else {
         const mealRecipe = toMealPlanRecipe(item);
         if (mealRecipe) {
-          const slot = findNextEmptySlot(plan);
+          const slot = resolveAssignSlot(pendingSlot, activeDay, activeMeal);
           assignRecipe(slot.day, slot.meal, mealRecipe);
           setActiveDay(slot.day);
+          setActiveMeal(slot.meal);
           setAcceptedSlots((prev) => ({
             ...prev,
             [item.id]: `${slot.day} · ${slot.meal}`,
@@ -331,7 +331,7 @@ export default function Recipes() {
             {MEALS.map((meal) => {
               const slot = plan[activeDay]?.[meal];
               const selecting =
-                assignTarget?.day === activeDay && assignTarget?.meal === meal;
+                pendingSlot?.day === activeDay && pendingSlot?.meal === meal;
 
               return (
                 <article
@@ -365,7 +365,7 @@ export default function Recipes() {
                       <button
                         type="button"
                         className="btn btn-sm btn-secondary"
-                        onClick={() => setAssignTarget({ day: activeDay, meal })}
+                        onClick={() => selectPlannerSlot(activeDay, meal)}
                       >
                         Change recipe
                       </button>
@@ -374,7 +374,7 @@ export default function Recipes() {
                     <button
                       type="button"
                       className="rp-slot-empty"
-                      onClick={() => setAssignTarget({ day: activeDay, meal })}
+                      onClick={() => selectPlannerSlot(activeDay, meal)}
                     >
                       + Add recipe
                     </button>
@@ -385,19 +385,19 @@ export default function Recipes() {
           </div>
         </div>
 
-        {assignTarget && (
+        {pendingSlot && (
           <div className="rp-assign-banner">
             <p>
               Choosing a recipe for{" "}
               <strong>
-                {assignTarget.day} · {assignTarget.meal}
+                {pendingSlot.day} · {pendingSlot.meal}
               </strong>
               . Pick one below.
             </p>
             <button
               type="button"
               className="btn btn-sm btn-outline"
-              onClick={() => setAssignTarget(null)}
+              onClick={() => setPendingSlot(null)}
             >
               Cancel
             </button>
@@ -642,16 +642,17 @@ export default function Recipes() {
                       type="button"
                       className="btn btn-sm btn-primary"
                       onClick={() => {
-                        if (assignTarget) {
-                          handleAssign(recipe);
+                        if (pendingSlot) {
+                          handleAssign(recipe, pendingSlot);
                         } else {
-                          assignRecipe(activeDay, "Dinner", recipe);
+                          const slot = resolveAssignSlot(null, activeDay, activeMeal);
+                          assignRecipe(slot.day, slot.meal, recipe);
                         }
                       }}
                     >
-                      {assignTarget
-                        ? `Add to ${assignTarget.day.slice(0, 3)} ${assignTarget.meal}`
-                        : `Add to ${activeDay.slice(0, 3)} dinner`}
+                      {pendingSlot
+                        ? `Add to ${pendingSlot.day.slice(0, 3)} ${pendingSlot.meal}`
+                        : `Add to ${activeDay.slice(0, 3)} ${activeMeal.toLowerCase()}`}
                     </button>
                   </div>
                 </article>

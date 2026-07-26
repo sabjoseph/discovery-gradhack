@@ -1,18 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useCustomer } from "./CustomerContext";
 import { api } from "../lib/api";
+import { DAYS, MEALS } from "../lib/mealPlanSlot";
 
-export const DAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
-
-export const MEALS = ["Breakfast", "Lunch", "Dinner"];
+export { DAYS, MEALS };
 
 function emptyWeek() {
   return Object.fromEntries(
@@ -36,6 +27,7 @@ export function MealPlanProvider({ children }) {
       return emptyWeek();
     }
   });
+  const [pendingSlot, setPendingSlot] = useState(null);
 
   useEffect(() => {
     try {
@@ -53,7 +45,14 @@ export function MealPlanProvider({ children }) {
   const value = useMemo(
     () => ({
       plan,
+      pendingSlot,
+      setPendingSlot,
       assignRecipe: (day, meal, recipe) => {
+        if (!DAYS.includes(day) || !MEALS.includes(meal)) {
+          console.warn("[MealPlan] Ignoring invalid slot:", day, meal);
+          return;
+        }
+
         setPlan((prev) => ({
           ...prev,
           [day]: {
@@ -89,7 +88,7 @@ export function MealPlanProvider({ children }) {
       },
       clearWeek: () => setPlan(emptyWeek()),
     }),
-    [plan, customerId]
+    [plan, pendingSlot, customerId]
   );
 
   return (

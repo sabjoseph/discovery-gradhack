@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useCustomer } from "../context/CustomerContext";
 import { DAYS, MEALS, useMealPlan } from "../context/MealPlanContext";
+import { resolveAssignSlot } from "../lib/mealPlanSlot";
 import { api } from "../lib/api";
 import {
   MAX_SERVINGS,
@@ -43,26 +44,26 @@ function sourceBadge(source = "") {
   return { label: "Catalogue", tone: "neutral" };
 }
 
-function findNextEmptySlot(plan) {
-  for (const day of DAYS) {
-    for (const meal of MEALS) {
-      if (!plan[day]?.[meal]) return { day, meal };
-    }
-  }
-  return { day: DAYS[0], meal: "Dinner" };
-}
-
 export default function RecipeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { customer } = useCustomer();
-  const { plan, assignRecipe } = useMealPlan();
+  const { pendingSlot, setPendingSlot, assignRecipe } = useMealPlan();
   const [recipe, setRecipe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [desiredServings, setDesiredServings] = useState(MIN_SERVINGS);
   const [servingsInput, setServingsInput] = useState(String(MIN_SERVINGS));
   const [planNote, setPlanNote] = useState("");
+  const [planDay, setPlanDay] = useState(pendingSlot?.day ?? DAYS[0]);
+  const [planMeal, setPlanMeal] = useState(pendingSlot?.meal ?? "Dinner");
+
+  useEffect(() => {
+    if (pendingSlot?.day && pendingSlot?.meal) {
+      setPlanDay(pendingSlot.day);
+      setPlanMeal(pendingSlot.meal);
+    }
+  }, [pendingSlot]);
 
   useEffect(() => {
     let alive = true;
@@ -154,7 +155,11 @@ export default function RecipeDetail() {
   }
 
   function handleAddToMealPlan() {
-    const slot = findNextEmptySlot(plan);
+    const slot = resolveAssignSlot(
+      { day: planDay, meal: planMeal },
+      planDay,
+      planMeal
+    );
     assignRecipe(slot.day, slot.meal, {
       id: recipe.id,
       name: recipe.name,
@@ -163,7 +168,20 @@ export default function RecipeDetail() {
       matchPercent: recipe.matchPercent,
       source: recipe.source,
     });
+    setPendingSlot(null);
     setPlanNote(`Added to ${slot.day} · ${slot.meal}`);
+  }
+
+  function handlePlanDayChange(event) {
+    const day = event.target.value;
+    setPlanDay(day);
+    setPendingSlot({ day, meal: planMeal });
+  }
+
+  function handlePlanMealChange(event) {
+    const meal = event.target.value;
+    setPlanMeal(meal);
+    setPendingSlot({ day: planDay, meal });
   }
 
   return (
@@ -526,6 +544,29 @@ export default function RecipeDetail() {
           <p className="rp-nutrition-disclaimer">{nutrition.disclaimer}</p>
         </section>
 
+        <div className="rp-detail-plan-picker">
+          <label>
+            <span>Day</span>
+            <select value={planDay} onChange={handlePlanDayChange}>
+              {DAYS.map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Meal</span>
+            <select value={planMeal} onChange={handlePlanMealChange}>
+              {MEALS.map((meal) => (
+                <option key={meal} value={meal}>
+                  {meal}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         <div className="rp-detail-actions">
           <a
             className="btn rp-retailer-link rp-retailer-checkers"
@@ -552,7 +593,7 @@ export default function RecipeDetail() {
             className="btn btn-outline"
             onClick={handleAddToMealPlan}
           >
-            Add to meal plan
+            Add to {planDay.slice(0, 3)} {planMeal.toLowerCase()}
           </button>
           <Link to="/app/recipes" className="btn btn-secondary">
             Back to recipes
