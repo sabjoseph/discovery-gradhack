@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:meal-plan-slot": "node scripts/test-meal-plan-slot.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
