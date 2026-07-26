@@ -145,12 +145,13 @@ export default function Rewards() {
     .map((reward, index) => ({ reward, index }))
     .sort((a, b) => {
       const rank = (reward) => {
-        // The Cookery is pinned to the top whatever its state.
+        // Claimed vouchers always sink to the bottom.
+        if (reward.alreadyOwned) return 4;
+        // The Cookery stays pinned among unclaimed rewards.
         if (reward.unlockCriteria === "healthy_foods") return 0;
         if (reward.canAfford) return 1;
-        if (!reward.alreadyOwned && !reward.locked) return 2;
-        if (reward.locked) return 3;
-        return 4;
+        if (!reward.locked) return 2;
+        return 3;
       };
       return (
         rank(a.reward) - rank(b.reward) ||
